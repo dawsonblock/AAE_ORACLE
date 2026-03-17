@@ -1,0 +1,16 @@
+{
+  "purpose": "reference slices from uploaded upstream repos used to shape the integration layer",
+  "files": [
+    "openviking/session/memory_extractor.py",
+    "openviking/retrieve/hierarchical_retriever.py",
+    "simplemem/cross/orchestrator.py",
+    "simplemem/cross/session_manager.py",
+    "simplemem/cross/context_injector.py",
+    "simplemem/core/hybrid_retriever.py",
+    "agentshield/src/rules/agents.ts",
+    "agentshield/src/rules/hooks.ts",
+    "agentshield/src/rules/mcp.ts",
+    "agentshield/src/rules/permissions.ts",
+    "agentshield/src/rules/secrets.ts"
+  ]
+}

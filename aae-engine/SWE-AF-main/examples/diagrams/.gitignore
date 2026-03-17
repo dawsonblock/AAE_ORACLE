@@ -1,4 +1,0 @@
-.worktrees/
-/target/
-**/*.rs.bk
-*.pdb
