@@ -3,12 +3,12 @@ from __future__ import annotations
 
 from enum import Enum
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 # MARK: - Schema Version
 
-CANDIDATE_SCHEMA_VERSION = "aae.candidate.v1"
+CANDIDATE_SCHEMA_VERSION = "aae.oracle_bridge.v1"
 
 
 # MARK: - Enums
@@ -76,49 +76,16 @@ class OraclePlanRequest(BaseModel):
 
 
 class OracleCandidateCommand(BaseModel):
+    """Candidate command proposed by AAE. Validation is deferred to validate_candidates()."""
     candidate_id: str
     kind: str
     tool: str
     payload: Dict[str, Any] = Field(default_factory=dict)
     rationale: str
-    confidence: float = Field(ge=0.0, le=1.0)
-    predicted_score: float = Field(ge=0.0, le=1.0)
+    confidence: float
+    predicted_score: float
     safety_class: str
-
-    @field_validator('kind')
-    @classmethod
-    def validate_kind(cls, v: str) -> str:
-        if v not in CandidateKind.values():
-            raise ValueError(f"Unknown candidate_kind: \"{v}\". Allowed values: {CandidateKind.values()}")
-        return v
-
-    @field_validator('tool')
-    @classmethod
-    def validate_tool(cls, v: str) -> str:
-        if v not in ToolName.values():
-            raise ValueError(f"Unknown tool_name: \"{v}\". Allowed values: {ToolName.values()}")
-        return v
-
-    @field_validator('safety_class')
-    @classmethod
-    def validate_safety_class(cls, v: str) -> str:
-        if v not in SafetyClass.values():
-            raise ValueError(f"Invalid safety_class: \"{v}\". Allowed values: {SafetyClass.values()}")
-        return v
-
-    @field_validator('rationale')
-    @classmethod
-    def validate_rationale(cls, v: str) -> str:
-        if not v or not v.strip():
-            raise ValueError("Missing required field: rationale (empty or whitespace)")
-        return v.strip()
-
-    @field_validator('confidence')
-    @classmethod
-    def validate_confidence(cls, v: float) -> float:
-        if v < 0.0 or v > 1.0:
-            raise ValueError(f"confidence out of bounds: {v} (must be 0.0-1.0)")
-        return v
+    target_file: Optional[str] = None
 
     def requires_approval(self) -> bool:
         """Check if this candidate requires operator approval."""
@@ -196,6 +163,7 @@ def validate_candidates(candidates: List[OracleCandidateCommand]) -> Dict[str, A
         "rejected_candidates": len(rejected),
         "requires_approval_candidates": requires_approval_ids,
         "rejection_reasons": rejection_reasons,
+        "allRejectionReasons": rejection_reasons,
     }
 
 

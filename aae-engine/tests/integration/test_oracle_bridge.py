@@ -8,7 +8,6 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from pydantic import ValidationError
 
 from aae.dashboard_api.routers.oracle import router
 from aae.oracle_bridge import OraclePlanRequest, OraclePlanningBridge
@@ -113,7 +112,7 @@ def test_aae_suggests_better_target_file():
         # Use actual path for valid request
         tmp_path = Path('/tmp/test_aae_better_target')
         tmp_path.mkdir(exist_ok=True)
-        (tmp_path / 'src').mkdir()
+        (tmp_path / 'src').mkdir(exist_ok=True)
         (tmp_path / 'src' / 'main.py').write_text('def main():\n    return 1\n')
         
         response = bridge.plan(
@@ -238,7 +237,7 @@ def test_aae_timeout_handling():
 
 
 def test_aae_malformed_payload():
-    """Test: AAE returns malformed payload."""
+    """Test: AAE returns malformed payload - validate_candidates catches it."""
     malformed_data = {
         "goal_id": "goal-malformed",
         "engine": "aae.oracle_bridge.v1",
@@ -257,20 +256,22 @@ def test_aae_malformed_payload():
             }
         ]
     }
-    
-    # Test validation catches malformed payload
-    with pytest.raises(ValidationError):
-        # This should fail during candidate validation
-        OracleCandidateCommand(
-            candidate_id="malformed-001",
-            kind="invalid_kind_not_allowed",
-            tool="invalid_tool",
-            payload={},
-            rationale="",
-            confidence=1.5,
-            predicted_score=0.9,
-            safety_class="invalid_safety",
-        )
+
+    # Construction succeeds (lax model) - validate_candidates catches errors
+    malformed_candidate = OracleCandidateCommand(
+        candidate_id="malformed-001",
+        kind="invalid_kind_not_allowed",
+        tool="invalid_tool",
+        payload={},
+        rationale="",
+        confidence=1.5,
+        predicted_score=0.9,
+        safety_class="invalid_safety",
+    )
+
+    result = validate_candidates([malformed_candidate])
+    assert result['rejected_candidates'] == 1
+    assert "malformed-001" in result['rejection_reasons']
 
 
 def test_oracle_native_outranks_aae_plan():
@@ -315,7 +316,7 @@ def test_aae_outranks_weak_oracle_plan():
     bridge = OraclePlanningBridge()
     tmp_path = Path('/tmp/test_aae_rank')
     tmp_path.mkdir(exist_ok=True)
-    (tmp_path / 'src').mkdir()
+    (tmp_path / 'src').mkdir(exist_ok=True)
     (tmp_path / 'src' / 'app.py').write_text('def run():\n    return 1\n')
     
     response = bridge.plan(
@@ -786,7 +787,7 @@ def main():
     return "hello"
 ''')
     
-    (tmp_path / 'tests').mkdir()
+    (tmp_path / 'tests').mkdir(exist_ok=True)
     (tmp_path / 'tests' / 'test_main.py').write_text('''\
 from main import main
 
@@ -837,7 +838,7 @@ def get_config():
     }
 ''')
     
-    (tmp_path / 'tests').mkdir()
+    (tmp_path / 'tests').mkdir(exist_ok=True)
     (tmp_path / 'tests' / 'test_config.py').write_text('''\
 from config import get_config
 
@@ -878,7 +879,7 @@ def get_value():
     return slow_operation()
 ''')
     
-    (tmp_path / 'tests').mkdir()
+    (tmp_path / 'tests').mkdir(exist_ok=True)
     (tmp_path / 'tests' / 'test_timing.py').write_text('''\
 from timing import get_value
 import time
@@ -1015,10 +1016,10 @@ def test_path_mismatch_fallback():
     tmp_path.mkdir(exist_ok=True)
     
     # Create files in non-standard location
-    (tmp_path / 'src').mkdir()
+    (tmp_path / 'src').mkdir(exist_ok=True)
     (tmp_path / 'src' / 'app.py').write_text('def run():\n    return 1\n')
     
-    (tmp_path / 'test_src').mkdir()
+    (tmp_path / 'test_src').mkdir(exist_ok=True)
     (tmp_path / 'test_src' / 'test_app.py').write_text('def test_run():\n    assert True\n')
     
     bridge = OraclePlanningBridge()

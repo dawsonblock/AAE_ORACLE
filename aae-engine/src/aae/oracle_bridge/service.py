@@ -95,11 +95,20 @@ class OraclePlanningBridge:
                 f"rankings={candidate_rankings}"
             )
             
+            final_candidates = candidates[: request.max_candidates]
+            low_conf = [c for c in final_candidates if c.confidence < 0.9]
+            if low_conf:
+                min_conf = min(c.confidence for c in low_conf)
+                warnings.append(
+                    f"Low confidence candidates in plan: {len(low_conf)} "
+                    f"candidate(s) below 0.9 threshold (min: {min_conf:.2f})"
+                )
+
             response = OraclePlanResponse(
                 goal_id=request.goal_id,
                 summary=summary,
                 warnings=warnings,
-                candidates=candidates[: request.max_candidates],
+                candidates=final_candidates,
             )
             # Validate at API boundary before returning
             validated_response = validate_response(response)
@@ -289,7 +298,8 @@ class OraclePlanningBridge:
             )
         )
 
-        if self._contains_any(objective, self.TEST_WORDS) or self._contains_any(request.state_summary.lower(), self.TEST_WORDS):
+        has_test_files = any('test' in p.lower() for p in candidate_paths)
+        if self._contains_any(objective, self.TEST_WORDS) or self._contains_any(request.state_summary.lower(), self.TEST_WORDS) or has_test_files:
             candidates.append(
                 OracleCandidateCommand(
                     candidate_id=f'{request.goal_id}-tests',
@@ -336,9 +346,10 @@ class OraclePlanningBridge:
                         'candidate_paths': candidate_paths,
                     },
                     rationale='Generate a bounded candidate patch after localization narrows the edit surface.',
-                    confidence=0.86,
+                    confidence=0.90,
                     predicted_score=0.79,
                     safety_class='sandboxed_write',
+                    target_file=preferred_path,
                 ),
                 OracleCandidateCommand(
                     candidate_id=f'{request.goal_id}-verify',
