@@ -1,0 +1,53 @@
+# Build artifacts
+*.egg-info/
+*.egg
+dist/
+build/
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Test / coverage
+.pytest_cache/
+**/.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# AAE runtime artifacts
+.artifacts/
+**/.artifacts/
+**/.artifacts-v2/
+.sandbox_artifacts/
+**/.sandbox_artifacts/
+artifacts/
+
+# Databases & runtime data
+*.db
+*.sqlite3
+*.jsonl
+
+# Dashboard
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.vite/
+dashboard/coverage/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Secrets
+.env
+*.env

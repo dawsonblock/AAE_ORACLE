@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aae-config
+  namespace: aae
+data:
+  LOG_LEVEL: "INFO"
+  REDIS_URL: "redis://redis-service:6379"
+  POSTGRES_DSN: "postgresql://aae:aae@postgres-service:5432/aae"
+  QDRANT_URL: "http://qdrant-service:6333"
+  CONTROLLER_QUEUE: "controller_tasks"
+  PLANNER_QUEUE: "planner_tasks"
+  PLANNER_CONCURRENCY: "2"
+  AGENT_QUEUE: "agent_tasks"
+  AGENT_CONCURRENCY: "4"
+  SANDBOX_QUEUE: "sandbox_tasks"
+  SANDBOX_CONCURRENCY: "2"
+  PYTHONUNBUFFERED: "1"

@@ -1,0 +1,16 @@
+{
+  "id": "python-005-index-out-of-bounds",
+  "name": "Index Out of Bounds",
+  "description": "Fix an off-by-one error when accessing a list element.",
+  "language": "python",
+  "difficulty": "easy",
+  "environment": {
+    "files": {
+      "app.py": "def get_last_element(items):\n    if not items:\n        return None\n    return items[len(items)] # Should be len(items) - 1\n"
+    },
+    "test_command": "python3 -c 'from app import get_last_element; assert get_last_element([1, 2, 3]) == 3'"
+  },
+  "oracle": {
+    "type": "test_pass"
+  }
+}

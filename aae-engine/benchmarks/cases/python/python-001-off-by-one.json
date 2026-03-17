@@ -1,0 +1,14 @@
+{
+    "case_id": "python-001-off-by-one",
+    "description": "Classic off-by-one error in list indexing",
+    "language": "python",
+    "broken_code": "def get_last_element(items):\n    return items[len(items)]\n",
+    "expected_fix": "def get_last_element(items):\n    return items[len(items) - 1]\n",
+    "baseline": {
+        "passed": false,
+        "fail_count": 1,
+        "error_type": "IndexError"
+    },
+    "test_command": "pytest test_get_last_element.py",
+    "candidates": []
+}

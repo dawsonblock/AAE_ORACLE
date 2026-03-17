@@ -1,0 +1,23 @@
+{
+  "name": "oracle-aae-fusion",
+  "version": "1.0.0",
+  "oracle_repo": "oracle-os",
+  "aae_repo": "aae-engine",
+  "added_files": [
+    "aae-engine/src/aae/oracle_bridge/contracts.py",
+    "aae-engine/src/aae/oracle_bridge/service.py",
+    "aae-engine/src/aae/dashboard_api/routers/oracle.py",
+    "aae-engine/tests/integration/test_oracle_bridge.py",
+    "oracle-os/Sources/OracleOS/Integration/OracleAAEModels.swift",
+    "oracle-os/Sources/OracleOS/Integration/OracleAAEBridgeConfig.swift",
+    "oracle-os/Sources/OracleOS/Integration/OracleAAEBridgeClient.swift",
+    "oracle-os/Sources/OracleOS/Integration/OracleAAEExperimentCoordinator.swift",
+    "docs/merged_architecture.md",
+    "docs/integration_contract.md",
+    "docs/quickstart.md"
+  ],
+  "notes": [
+    "Oracle was not rebuilt in-container because the host runtime depends on macOS-only frameworks.",
+    "AAE bridge endpoint and test were added and validated in this environment."
+  ]
+}

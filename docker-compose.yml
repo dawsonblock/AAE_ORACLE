@@ -1,0 +1,9 @@
+version: "3.9"
+services:
+  aae-dashboard:
+    build:
+      context: ./aae-engine
+    command: python -m aae.dashboard_api.server --host 0.0.0.0 --port 8787
+    ports:
+      - "8787:8787"
+    working_dir: /app

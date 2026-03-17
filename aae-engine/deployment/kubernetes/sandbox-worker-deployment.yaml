@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aae-sandbox-worker
+  namespace: aae
+  labels:
+    app: aae-sandbox-worker
+    component: sandbox
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aae-sandbox-worker
+  template:
+    metadata:
+      labels:
+        app: aae-sandbox-worker
+        component: sandbox
+    spec:
+      terminationGracePeriodSeconds: 90
+      # Sandbox workers need Docker socket access for container isolation
+      volumes:
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+      containers:
+        - name: sandbox
+          image: aae-platform:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "scripts/run_sandbox_node.py"]
+          envFrom:
+            - configMapRef:
+                name: aae-config
+          volumeMounts:
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          securityContext:
+            runAsNonRoot: false   # Docker socket requires elevated perms
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aae-sandbox-hpa
+  namespace: aae
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aae-sandbox-worker
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

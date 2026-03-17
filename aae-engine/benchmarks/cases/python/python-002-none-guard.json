@@ -1,0 +1,14 @@
+{
+    "case_id": "python-002-none-guard",
+    "description": "Missing None check causing AttributeError",
+    "language": "python",
+    "broken_code": "def get_username(user):\n    return user.name.upper()\n",
+    "expected_fix": "def get_username(user):\n    if user is None:\n        return None\n    return user.name.upper()\n",
+    "baseline": {
+        "passed": false,
+        "fail_count": 1,
+        "error_type": "AttributeError"
+    },
+    "test_command": "pytest test_get_username.py",
+    "candidates": []
+}

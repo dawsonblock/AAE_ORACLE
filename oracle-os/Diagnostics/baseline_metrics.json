@@ -1,0 +1,22 @@
+{
+  "baseline": {
+    "description": "Pre-upgrade performance baseline for Oracle-OS",
+    "task_set": [
+      "app_launch_menu_navigation",
+      "browser_login_form_flow",
+      "clone_repo_run_tests",
+      "bounded_failing_test_repair",
+      "dialog_interruption_recovery"
+    ],
+    "metrics": {
+      "success_rate": null,
+      "average_steps": null,
+      "wrong_target_rate": null,
+      "recovery_count": null,
+      "workflow_reuse_rate": null,
+      "patch_success_rate": null
+    },
+    "recorded_at": null,
+    "notes": "Populate by running the fixed task set against the pre-upgrade system."
+  }
+}

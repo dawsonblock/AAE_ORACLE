@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aae-controller
+  namespace: aae
+  labels:
+    app: aae-controller
+    component: controller
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate   # single-leader; only one controller at a time
+  selector:
+    matchLabels:
+      app: aae-controller
+  template:
+    metadata:
+      labels:
+        app: aae-controller
+        component: controller
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: controller
+          image: aae-platform:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "scripts/run_controller.py"]
+          envFrom:
+            - configMapRef:
+                name: aae-config
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 15

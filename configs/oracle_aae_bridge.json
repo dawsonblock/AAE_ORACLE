@@ -1,0 +1,12 @@
+{
+  "base_url": "http://127.0.0.1:8787",
+  "plan_endpoint": "/api/oracle/plan",
+  "result_endpoint": "/api/oracle/experiment_result",
+  "timeout_seconds": 30,
+  "max_candidates_per_goal": 5,
+  "max_execution_attempts": 3,
+  "max_patch_files": 3,
+  "max_total_runtime_seconds": 300,
+  "max_failed_attempts_before_abort": 2,
+  "enabled": true
+}

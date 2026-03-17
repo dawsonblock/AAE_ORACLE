@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: aae-gateway
+  namespace: aae
+  labels:
+    app: aae-gateway
+    component: gateway
+spec:
+  type: LoadBalancer
+  selector:
+    app: aae-gateway
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+    - name: https
+      port: 443
+      targetPort: 8443
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aae-gateway
+  namespace: aae
+  labels:
+    app: aae-gateway
+    component: gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aae-gateway
+  template:
+    metadata:
+      labels:
+        app: aae-gateway
+        component: gateway
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: gateway
+          image: aae-platform:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - "python"
+            - "-m"
+            - "uvicorn"
+            - "aae.gateway.api_server:app"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "8080"
+            - "--workers"
+            - "2"
+          envFrom:
+            - configMapRef:
+                name: aae-config
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10

@@ -1,0 +1,24 @@
+planner:
+  beam_width: 5
+  max_depth: 8
+  max_branches: 20
+  token_budget: 32000
+  simulation_enabled: true
+  rollout_depth: 3
+  branch_memory_ttl_hours: 24
+
+  scoring:
+    test_pass_weight: 0.50
+    patch_size_weight: 0.20
+    dependency_impact_weight: 0.20
+    semantic_weight: 0.10
+
+  policy:
+    model: "gradient_boosted"
+    min_confidence: 0.65
+    fallback: "beam_search"
+
+  timeouts:
+    plan_generation_s: 120
+    simulation_s: 30
+    evaluation_s: 20

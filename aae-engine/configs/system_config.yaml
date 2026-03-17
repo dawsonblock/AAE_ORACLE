@@ -1,0 +1,33 @@
+agentfield:
+  base_url: "http://localhost:8080"
+  api_key_env: "AGENTFIELD_API_KEY"
+  poll_interval_s: 1.0
+  request_timeout_s: 30.0
+
+controller:
+  max_concurrency: 4
+  artifacts_dir: ".artifacts"
+
+siblings:
+  af_deep_research:
+    path: "../af-deep-research-main"
+    node_target: "meta_deep_research.execute_deep_research"
+  sec_af:
+    path: "../sec-af-main"
+    node_target: "sec-af.audit"
+  swe_af:
+    path: "../SWE-AF-main"
+    node_target: "swe-planner.build"
+
+localization:
+  enabled: true
+  weights:
+    stacktrace: 0.30
+    spectrum: 0.25
+    graph: 0.20
+    trace: 0.15
+    semantic: 0.10
+  limits:
+    top_files: 5
+    top_functions: 8
+    top_spans: 12

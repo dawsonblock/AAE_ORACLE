@@ -1,0 +1,84 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # AAE Gateway
+  - job_name: aae-gateway
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [aae]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_component]
+        action: keep
+        regex: gateway
+      - source_labels: [__meta_kubernetes_pod_ip]
+        target_label: __address__
+        replacement: "${1}:8080"
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: instance
+
+  # AAE Controller
+  - job_name: aae-controller
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [aae]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_component]
+        action: keep
+        regex: controller
+      - source_labels: [__meta_kubernetes_pod_ip]
+        target_label: __address__
+        replacement: "${1}:9090"
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: instance
+
+  # AAE Planner workers
+  - job_name: aae-planner
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [aae]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_component]
+        action: keep
+        regex: planner
+      - source_labels: [__meta_kubernetes_pod_ip]
+        target_label: __address__
+        replacement: "${1}:9090"
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: instance
+
+  # AAE Agent workers
+  - job_name: aae-agent
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [aae]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_component]
+        action: keep
+        regex: agent
+      - source_labels: [__meta_kubernetes_pod_ip]
+        target_label: __address__
+        replacement: "${1}:9090"
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: instance
+
+  # AAE Sandbox workers
+  - job_name: aae-sandbox
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [aae]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_component]
+        action: keep
+        regex: sandbox
+      - source_labels: [__meta_kubernetes_pod_ip]
+        target_label: __address__
+        replacement: "${1}:9090"
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: instance

@@ -1,0 +1,16 @@
+{
+  "id": "python-004-missing-return",
+  "name": "Missing Return Statement",
+  "description": "A function that has logic but forget to return the result.",
+  "language": "python",
+  "difficulty": "easy",
+  "environment": {
+    "files": {
+      "app.py": "def calculate_sum(a, b):\n    result = a + b\n    # result is calculated but not returned\n"
+    },
+    "test_command": "python3 -c 'from app import calculate_sum; assert calculate_sum(1, 2) == 3'"
+  },
+  "oracle": {
+    "type": "test_pass"
+  }
+}

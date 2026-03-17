@@ -1,0 +1,218 @@
+version: "3.9"
+
+services:
+  # ─── Storage Layer ──────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aae
+      POSTGRES_USER: aae
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aae_secret}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aae"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  # ─── Event Bus ──────────────────────────────────────────────────────────────
+  # Redis already handles the event bus via REDIS_URL
+
+  # ─── Controller ─────────────────────────────────────────────────────────────
+  controller:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: aae/controller:latest
+    restart: unless-stopped
+    command: aae-launcher --config configs/system_config.yaml --workflow secure_build
+    environment:
+      AAE_DATABASE_URL: "postgresql://aae:${POSTGRES_PASSWORD:-aae_secret}@postgres:5432/aae"
+      REDIS_URL: "redis://redis:6379/0"
+      AGENTFIELD_API_KEY: "${AGENTFIELD_API_KEY}"
+      QDRANT_URL: "http://qdrant:6333"
+      AAE_ROLE: controller
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./configs:/app/configs:ro
+      - artifacts:/app/.artifacts
+    ports:
+      - "8000:8000"
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+
+  # ─── Dashboard API ───────────────────────────────────────────────────────────
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: aae/dashboard:latest
+    restart: unless-stopped
+    command: aae-dashboard
+    environment:
+      AAE_DATABASE_URL: "postgresql://aae:${POSTGRES_PASSWORD:-aae_secret}@postgres:5432/aae"
+      REDIS_URL: "redis://redis:6379/0"
+      AGENTFIELD_API_KEY: "${AGENTFIELD_API_KEY}"
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./configs:/app/configs:ro
+      - artifacts:/app/.artifacts:ro
+    ports:
+      - "8001:8001"
+
+  # ─── Planner Workers ─────────────────────────────────────────────────────────
+  planner-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: aae/worker:latest
+    restart: unless-stopped
+    command: python scripts/run_planner_node.py
+    environment:
+      AAE_DATABASE_URL: "postgresql://aae:${POSTGRES_PASSWORD:-aae_secret}@postgres:5432/aae"
+      REDIS_URL: "redis://redis:6379/0"
+      AAE_ROLE: planner
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./configs:/app/configs:ro
+      - artifacts:/app/.artifacts
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "4"
+          memory: 8G
+
+  # ─── Agent Workers ───────────────────────────────────────────────────────────
+  agent-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: aae/worker:latest
+    restart: unless-stopped
+    command: python scripts/run_agent_worker.py
+    environment:
+      AAE_DATABASE_URL: "postgresql://aae:${POSTGRES_PASSWORD:-aae_secret}@postgres:5432/aae"
+      REDIS_URL: "redis://redis:6379/0"
+      AGENTFIELD_API_KEY: "${AGENTFIELD_API_KEY}"
+      AAE_ROLE: agent
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./configs:/app/configs:ro
+      - artifacts:/app/.artifacts
+    deploy:
+      replicas: 4
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+
+  # ─── Sandbox Workers ─────────────────────────────────────────────────────────
+  sandbox-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: aae/worker:latest
+    restart: unless-stopped
+    command: python scripts/run_sandbox_node.py
+    environment:
+      AAE_DATABASE_URL: "postgresql://aae:${POSTGRES_PASSWORD:-aae_secret}@postgres:5432/aae"
+      REDIS_URL: "redis://redis:6379/0"
+      AAE_ROLE: sandbox
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./configs:/app/configs:ro
+      - artifacts:/app/.artifacts
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "2"
+          memory: 8G
+
+  # ─── Monitoring ───────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    volumes:
+      - ./deployment/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_PASSWORD:-admin}"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres_data:
+  redis_data:
+  qdrant_data:
+  artifacts:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  default:
+    name: aae-network

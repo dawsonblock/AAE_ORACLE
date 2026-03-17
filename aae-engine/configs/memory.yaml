@@ -1,0 +1,33 @@
+memory:
+  l1_in_memory:
+    enabled: true
+    max_entries: 10000
+    ttl_seconds: 3600
+
+  l2_vector:
+    enabled: true
+    backend: "qdrant"              # qdrant | milvus | in_memory
+    qdrant_url: "${QDRANT_URL:-http://localhost:6333}"
+    collection: "aae_embeddings"
+    embedding_model: "all-MiniLM-L6-v2"
+    dimension: 384
+    top_k: 8
+
+  l3_knowledge_graph:
+    enabled: true
+    backend: "networkx"            # neo4j | networkx
+    neo4j_url: "${NEO4J_URL:-bolt://localhost:7687}"
+    neo4j_user: "${NEO4J_USER:-neo4j}"
+    neo4j_password: "${NEO4J_PASSWORD:-}"
+    max_graph_nodes: 500000
+
+  l4_trajectory_archive:
+    enabled: true
+    backend: "postgres"            # postgres | jsonl
+    table: "aae_trajectories"
+    max_records: 1000000
+    prune_after_days: 90
+
+  promotion:
+    l1_to_l2_threshold: 3          # times recalled before promoting to vector
+    summary_max_tokens: 800
