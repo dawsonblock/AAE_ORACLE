@@ -4,10 +4,10 @@ set -e
 echo "=== AAE Oracle Baseline Verification ==="
 
 echo ""
-echo "1. Running AAE tests..."
+echo "1. Running AAE integration test: tests/integration/test_oracle_bridge.py..."
 cd "$(dirname "$0")/../aae-engine"
 python -m pytest tests/integration/test_oracle_bridge.py -q
-echo "   ✓ Tests passed"
+echo "   ✓ Integration test passed"
 
 echo ""
 echo "2. Starting AAE service..."
