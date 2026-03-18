@@ -21,8 +21,11 @@ BRIDGE = OraclePlanningBridge()
 
 # Persistent stores (file-backed SQLite for data that survives restarts)
 _experiment_store = ExperimentStore(db="experiments.db")
-_replay_engine = ReplayEngine(experiment_store=_experiment_store)
 _event_logger = StructuredEventLogger()
+_replay_engine = ReplayEngine(
+    experiment_store=_experiment_store,
+    event_log_path=_event_logger.path,
+)
 
 # In-memory fusion observability store (Phase 6)
 class FusionStatsStore:
