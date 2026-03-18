@@ -118,7 +118,7 @@ public struct OracleAAEPlanRequest: Sendable, Codable {
         self.stateSummary = stateSummary
         self.constraints = constraints
         self.maxCandidates = max(1, maxCandidates)
-        self.traceID = traceID ?? UUID().uuidString
+        self.traceID = traceID
     }
 }
 
