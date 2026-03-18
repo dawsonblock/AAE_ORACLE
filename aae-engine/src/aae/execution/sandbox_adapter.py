@@ -1,16 +1,57 @@
+"""Sandbox adapter module - wraps real sandbox for execution.
+
+This adapter provides the interface between the Executor and the real
+SandboxManager. It follows the adapter pattern to translate ActionSpec
+calls into SandboxManager commands.
+"""
+
+from __future__ import annotations
+
 import subprocess
-from .patch_engine import PatchEngine
+from typing import TYPE_CHECKING, Any
+
+from aae.execution.patch_engine import PatchEngine
+
+if TYPE_CHECKING:
+    from aae.sandbox.sandbox_manager import SandboxManager
 
 
 class SandboxAdapter:
-    def __init__(self):
-        self.patch_engine = PatchEngine()
+    """Adapter that wraps the real SandboxManager for use by the Executor.
 
-    def run(self, command):
-        ctype = command["type"]
+    This is the ONLY way execution should access the sandbox - all sandbox
+    interactions go through this adapter to ensure consistent interface
+    and proper result translation.
+
+    Supports both the sync ``run(command)`` dispatch interface (used by
+    simple executors) and the async ``execute(action)`` interface (used by
+    the full Executor with SandboxManager).
+    """
+
+    def __init__(
+        self,
+        sandbox_manager: "SandboxManager | None" = None,
+    ) -> None:
+        """Initialize adapter with optional sandbox manager.
+
+        Args:
+            sandbox_manager: Optional SandboxManager instance. If not provided,
+                           a new SandboxManager will be created lazily.
+        """
+        self._sandbox = sandbox_manager
+        self._patch_engine = PatchEngine()
+
+    # ── Sync interface (used by executor_simple / legacy callers) ────────────
+
+    def run(self, command: dict) -> dict:
+        """Execute a command dict synchronously.
+
+        Dispatches on command["type"]: "patch", "test", or "shell".
+        """
+        ctype = command.get("type", "")
 
         if ctype == "patch":
-            return self.patch_engine.apply_patch(
+            return self._patch_engine.apply_patch(
                 command["repo"], command["patch"]
             )
 
@@ -20,7 +61,7 @@ class SandboxAdapter:
                 cwd=command["repo"],
                 shell=True,
                 capture_output=True,
-                text=True
+                text=True,
             )
             return {
                 "stdout": proc.stdout,
@@ -34,7 +75,7 @@ class SandboxAdapter:
                 cwd=command["repo"],
                 shell=True,
                 capture_output=True,
-                text=True
+                text=True,
             )
             return {
                 "stdout": proc.stdout,
@@ -42,62 +83,20 @@ class SandboxAdapter:
                 "exit_code": proc.returncode,
             }
 
-        return {"exit_code": 1, "stderr": f"unknown command type: {ctype}"}
-"""Sandbox adapter module - wraps real sandbox for execution.
+        return {"exit_code": 1, "stderr": "unknown command type: %s" % ctype}
 
-This adapter provides the interface between the Executor and the real
-SandboxManager. It follows the adapter pattern to translate ActionSpec
-calls into SandboxManager commands.
-"""
+    # ── Async interface (used by full Executor with SandboxManager) ──────────
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, Any
-
-from aae.execution.executor import ActionResult, ActionSpec
-
-if TYPE_CHECKING:
-    from aae.sandbox.sandbox_manager import SandboxManager
-
-
-class SandboxAdapter:
-    """Adapter that wraps the real SandboxManager for use by the Executor.
-
-    This is the ONLY way execution should access the sandbox - all sandbox
-    interactions go through this adapter to ensure consistent interface
-    and proper result translation.
-    """
-
-    def __init__(
-        self,
-        sandbox_manager: "SandboxManager | None" = None,
-    ) -> None:
-        """Initialize adapter with optional sandbox manager.
-
-        Args:
-            sandbox_manager: Optional SandboxManager instance. If not provided,
-                           a new SandboxManager will be created.
-        """
-        if sandbox_manager is not None:
-            self._sandbox = sandbox_manager
-        else:
-            from aae.sandbox.sandbox_manager import SandboxManager
-            self._sandbox = SandboxManager()
-
-    async def execute(self, action: ActionSpec) -> ActionResult:
-        """Execute an action in the sandbox.
+    async def execute(self, action: Any) -> Any:
+        """Execute an ActionSpec in the sandbox asynchronously.
 
         Translates ActionSpec to sandbox command and returns standardized
         ActionResult.
-
-        Args:
-            action: The ActionSpec to execute
-
-        Returns:
-            ActionResult with execution outcome
         """
+        from aae.execution.executor import ActionResult
+
         # Extract command from action - prefer field, fall back to payload
-        command = action.command
+        command = getattr(action, "command", None)
         if not command:
             command = action.payload.get("command", "")
 
@@ -112,13 +111,12 @@ class SandboxAdapter:
             )
 
         try:
-            # Execute via the real sandbox manager
-            result = await self._sandbox.run_job(
+            sandbox = self._get_sandbox()
+            result = await sandbox.run_job(
                 command=command,
                 workdir=workdir,
             )
 
-            # Translate sandbox result to ActionResult
             return ActionResult(
                 action_id=action.action_id,
                 success=result.get("returncode", 1) == 0,
@@ -142,6 +140,7 @@ class SandboxAdapter:
                 },
             )
         except Exception as exc:
+            from aae.execution.executor import ActionResult
             return ActionResult(
                 action_id=action.action_id,
                 success=False,
@@ -149,24 +148,17 @@ class SandboxAdapter:
             )
 
     async def execute_spec(self, spec: Any) -> Any:
-        """Execute a SandboxRunSpec directly.
-
-        Allows direct access to sandbox specification execution when needed.
-
-        Args:
-            spec: SandboxRunSpec to execute
-
-        Returns:
-            Raw sandbox result
-        """
-        return await self._sandbox.execute_spec(spec)
+        """Execute a SandboxRunSpec directly."""
+        return await self._get_sandbox().execute_spec(spec)
 
     def get_sandbox(self) -> "SandboxManager":
-        """Get the underlying sandbox manager.
+        """Get the underlying sandbox manager."""
+        return self._get_sandbox()
 
-        Returns:
-            The wrapped SandboxManager instance
-        """
+    def _get_sandbox(self) -> "SandboxManager":
+        if self._sandbox is None:
+            from aae.sandbox.sandbox_manager import SandboxManager
+            self._sandbox = SandboxManager()
         return self._sandbox
 
 

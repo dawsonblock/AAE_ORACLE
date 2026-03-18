@@ -11,4 +11,4 @@ from .result_contracts import (
     RepairUsefulness,
     FailureMode,
 )
-from .result_service import process_experiment_result, ExperimentResultService
+from .result_service import ExperimentResultService

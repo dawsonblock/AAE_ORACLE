@@ -8,10 +8,9 @@ from aae.oracle_bridge import (
     OraclePlanRequest,
     OraclePlanningBridge,
     ExperimentResultRequest,
-    process_experiment_result,
     ContractVersion,
 )
-from aae.oracle_bridge.result_service import get_telemetry
+from aae.oracle_bridge.result_service import ExperimentResultService, get_telemetry
 from aae.analysis.structured_logger import StructuredEventLogger, generate_trace_id
 from aae.analysis.replay import ReplayEngine
 from aae.storage.experiment_store import ExperimentStore
@@ -26,6 +25,7 @@ _replay_engine = ReplayEngine(
     experiment_store=_experiment_store,
     event_log_path=_event_logger.path,
 )
+_result_service = ExperimentResultService()
 
 # In-memory fusion observability store (Phase 6)
 class FusionStatsStore:
@@ -197,7 +197,7 @@ async def receive_experiment_result(
     if request.trace_id is None:
         request.trace_id = trace_id
 
-    result = process_experiment_result(request)
+    result = _result_service.process_experiment_result(request)
     
     # Persist to experiment store
     _experiment_store.log(
