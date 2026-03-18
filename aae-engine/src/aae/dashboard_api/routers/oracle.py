@@ -147,6 +147,9 @@ async def plan(request: OraclePlanRequest):
 
     # Generate trace_id if not provided
     trace_id = request.trace_id or generate_trace_id()
+    if request.trace_id is None:
+        # Propagate generated trace_id back onto the request for downstream logging/observability
+        request.trace_id = trace_id
 
     # Record goal for observability
     FUSION_STATS.record_goal(request.goal_id, request.objective)
