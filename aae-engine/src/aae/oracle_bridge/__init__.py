@@ -1,4 +1,4 @@
-from .contracts import OraclePlanRequest, OraclePlanResponse, OracleCandidateCommand
+from .contracts import OraclePlanRequest, OraclePlanResponse, OracleCandidateCommand, ContractVersion
 from .service import OraclePlanningBridge
 from .result_contracts import (
     ExperimentResultRequest,

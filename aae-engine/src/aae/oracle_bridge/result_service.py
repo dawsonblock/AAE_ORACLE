@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from typing import Dict, List, Optional
 
 from aae.oracle_bridge.result_contracts import (
@@ -12,14 +13,17 @@ from aae.oracle_bridge.result_contracts import (
     RepairUsefulness,
     FailureMode,
 )
+from aae.storage.experiment_store import ExperimentStore
+from aae.storage.ranking_store import RankingStore
+from aae.analysis.structured_logger import StructuredEventLogger
 
 logger = logging.getLogger(__name__)
 
 
-# MARK: - In-Memory Ranking Store (would be database in production)
+# MARK: - In-Memory Ranking Store (legacy fallback)
 
 class CandidateRankingStore:
-    """In-memory store for candidate rankings - would be replaced with DB in production."""
+    """In-memory store for candidate rankings — kept for backward compatibility."""
     
     def __init__(self):
         # Maps goal_id -> list of (candidate_id, score)
@@ -63,8 +67,42 @@ class CandidateRankingStore:
         return self._rankings.get(goal_id, [])
 
 
-# Global ranking store instance
+# Global ranking store instance (in-memory fallback)
 _ranking_store = CandidateRankingStore()
+
+
+# MARK: - Rejection Telemetry
+
+class RejectionTelemetry:
+    """Tracks rejection metrics for observability."""
+
+    def __init__(self):
+        self.accepted: int = 0
+        self.rejected: int = 0
+        self.rejection_reasons: Dict[str, int] = defaultdict(int)
+
+    def record_acceptance(self) -> None:
+        self.accepted += 1
+
+    def record_rejection(self, reason: str) -> None:
+        self.rejected += 1
+        self.rejection_reasons[reason] += 1
+
+    def get_stats(self) -> Dict:
+        return {
+            "accepted": self.accepted,
+            "rejected": self.rejected,
+            "total": self.accepted + self.rejected,
+            "rejection_reasons": dict(self.rejection_reasons),
+        }
+
+
+# Global telemetry instance
+_telemetry = RejectionTelemetry()
+
+
+def get_telemetry() -> RejectionTelemetry:
+    return _telemetry
 
 
 # MARK: - Result Processing Service
@@ -72,8 +110,17 @@ _ranking_store = CandidateRankingStore()
 class ExperimentResultService:
     """Service for processing experiment results and scoring."""
     
-    def __init__(self, ranking_store: Optional[CandidateRankingStore] = None):
+    def __init__(
+        self,
+        ranking_store: Optional[CandidateRankingStore] = None,
+        experiment_store: Optional[ExperimentStore] = None,
+        persistent_ranking_store: Optional[RankingStore] = None,
+        event_logger: Optional[StructuredEventLogger] = None,
+    ):
         self._ranking_store = ranking_store or _ranking_store
+        self._experiment_store = experiment_store
+        self._persistent_ranking_store = persistent_ranking_store
+        self._event_logger = event_logger
     
     def process_experiment_result(
         self, request: ExperimentResultRequest
@@ -86,7 +133,9 @@ class ExperimentResultService:
         2. Classify failure mode if failed
         3. Record repair usefulness
         4. Update candidate ranking priors based on outcome
-        5. Return feedback summary
+        5. Persist to experiment store
+        6. Log structured event
+        7. Return feedback summary
         """
         logger.info(f"Processing experiment result for goal={request.goal_id}, "
                    f"candidate={request.candidate_id}, "
@@ -101,10 +150,24 @@ class ExperimentResultService:
         # Step 3: Assess repair usefulness
         repair_usefulness = self._assess_repair_usefulness(request, score)
         
-        # Step 4: Update candidate rankings
+        # Step 4: Update candidate rankings (in-memory)
         ranking_updates = self._update_rankings(request, score)
+
+        # Step 5: Persist to stores
+        trace_id = getattr(request, "trace_id", None)
+        self._persist_result(request, score, failure_mode, repair_usefulness, trace_id)
         
-        # Step 5: Generate feedback summary
+        # Step 6: Log structured event
+        self._log_event(request, score, failure_mode, trace_id)
+
+        # Step 7: Update telemetry
+        if score >= 0.4:
+            _telemetry.record_acceptance()
+        else:
+            reason = failure_mode or "low_score"
+            _telemetry.record_rejection(reason)
+        
+        # Step 8: Generate feedback summary
         feedback_summary = self._generate_feedback_summary(request, score, failure_mode)
         
         return ExperimentResultResponse(
@@ -114,7 +177,50 @@ class ExperimentResultService:
             feedback_summary=feedback_summary,
             updated_candidate_ranking=ranking_updates
         )
-    
+
+    def _persist_result(
+        self,
+        request: ExperimentResultRequest,
+        score: float,
+        failure_mode: Optional[str],
+        repair_usefulness: str,
+        trace_id: Optional[str],
+    ) -> None:
+        """Persist experiment result to SQLite store."""
+        if self._experiment_store:
+            self._experiment_store.log(
+                goal=request.goal_id,
+                candidate_id=request.candidate_id,
+                result=request.execution_status,
+                score=score,
+                failure_mode=failure_mode,
+                repair_usefulness=repair_usefulness,
+                trace_id=trace_id,
+            )
+        if self._persistent_ranking_store:
+            delta = score if request.execution_status == "success" else -0.5
+            self._persistent_ranking_store.update(
+                request.candidate_id, request.goal_id, delta
+            )
+
+    def _log_event(
+        self,
+        request: ExperimentResultRequest,
+        score: float,
+        failure_mode: Optional[str],
+        trace_id: Optional[str],
+    ) -> None:
+        """Log a structured event for the result."""
+        if self._event_logger:
+            self._event_logger.log_result(
+                goal_id=request.goal_id,
+                trace_id=trace_id or "",
+                candidate_id=request.candidate_id,
+                result=request.execution_status,
+                score=score,
+                latency_ms=request.elapsed_time_seconds * 1000,
+            )
+
     def _calculate_score(self, request: ExperimentResultRequest) -> float:
         """
         Calculate a score for the experiment outcome.

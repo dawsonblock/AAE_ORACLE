@@ -81,6 +81,7 @@ class ExperimentResultRequest(BaseModel):
     safety_violations: List[SafetyViolation] = Field(default_factory=list)
     elapsed_time_seconds: float = Field(ge=0.0)
     execution_status: str  # success, partial, failure
+    trace_id: Optional[str] = None
 
     def get_execution_status(self) -> ExecutionStatus:
         """Convert string to ExecutionStatus enum."""

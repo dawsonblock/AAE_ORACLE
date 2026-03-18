@@ -37,6 +37,28 @@ public enum OracleAAESafetyClass: String, CaseIterable, Sendable {
     }
 }
 
+/// Strict candidate type for fail-fast decoding.
+/// Matches Literal["patch", "refactor", "config"] on the Python side.
+public enum CandidateType: String, Codable, Sendable {
+    case patch
+    case refactor
+    case config
+}
+
+/// Risk level for capability gating.
+public enum CandidateRisk: String, Codable, Sendable {
+    case low
+    case medium
+    case high
+}
+
+// MARK: - Confidence Gating
+
+public enum CapabilityGatingError: Error, Sendable {
+    case lowConfidence(Double)
+    case highRisk(String)
+}
+
 // MARK: - Validation Result
 
 public struct OracleAAECandidateValidationResult: Sendable {
@@ -311,6 +333,41 @@ public actor OracleAAECandidateValidator {
 
     public func resetMetrics() {
         validationMetrics = ValidationMetrics()
+    }
+
+    // MARK: - Capability Gating (Phase 8)
+
+    /// Reject candidates below confidence threshold.
+    public func enforceConfidenceGate(_ candidate: OracleAAECandidate, threshold: Double = 0.6) throws {
+        if candidate.confidence < threshold {
+            throw CapabilityGatingError.lowConfidence(candidate.confidence)
+        }
+    }
+
+    /// Risk-aware execution gating.
+    /// - low → auto-execute
+    /// - medium → simulate first (returns .medium)
+    /// - high → reject
+    public func assessRisk(_ candidate: OracleAAECandidate) throws -> CandidateRisk {
+        // Determine risk from safety class
+        let risk: CandidateRisk
+        switch candidate.safetyClass {
+        case OracleAAESafetyClass.readOnly.rawValue:
+            risk = .low
+        case OracleAAESafetyClass.sandboxedWrite.rawValue,
+             OracleAAESafetyClass.boundedMutation.rawValue:
+            risk = .medium
+        case OracleAAESafetyClass.requiresApproval.rawValue:
+            risk = .high
+        default:
+            risk = .high
+        }
+
+        if risk == .high {
+            throw CapabilityGatingError.highRisk(candidate.safetyClass)
+        }
+
+        return risk
     }
 }
 

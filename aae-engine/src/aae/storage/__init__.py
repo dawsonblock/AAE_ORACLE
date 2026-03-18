@@ -8,6 +8,8 @@ from .graph_store_adapter import GraphStoreAdapter
 from .postgres_store import PostgresStore
 from .redis_store import RedisStore
 from .vector_store_adapter import VectorStoreAdapter
+from .experiment_store import ExperimentStore
+from .ranking_store import RankingStore
 
 __all__ = [
     "ArtifactStore",
@@ -15,4 +17,6 @@ __all__ = [
     "PostgresStore",
     "RedisStore",
     "VectorStoreAdapter",
+    "ExperimentStore",
+    "RankingStore",
 ]

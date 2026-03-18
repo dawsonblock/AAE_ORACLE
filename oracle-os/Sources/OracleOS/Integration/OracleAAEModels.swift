@@ -81,36 +81,44 @@ public extension Dictionary where Key == String, Value == OracleAAEJSONValue {
 }
 
 public struct OracleAAEPlanRequest: Sendable, Codable {
+    public let version: String
     public let goalID: String
     public let objective: String
     public let repoPath: String?
     public let stateSummary: String
     public let constraints: [String: String]
     public let maxCandidates: Int
+    public let traceID: String?
 
     enum CodingKeys: String, CodingKey {
+        case version
         case goalID = "goal_id"
         case objective
         case repoPath = "repo_path"
         case stateSummary = "state_summary"
         case constraints
         case maxCandidates = "max_candidates"
+        case traceID = "trace_id"
     }
 
     public init(
+        version: String = "v1",
         goalID: String,
         objective: String,
         repoPath: String? = nil,
         stateSummary: String = "",
         constraints: [String: String] = [:],
-        maxCandidates: Int = 5
+        maxCandidates: Int = 5,
+        traceID: String? = nil
     ) {
+        self.version = version
         self.goalID = goalID
         self.objective = objective
         self.repoPath = repoPath
         self.stateSummary = stateSummary
         self.constraints = constraints
         self.maxCandidates = max(1, maxCandidates)
+        self.traceID = traceID ?? UUID().uuidString
     }
 }
 
