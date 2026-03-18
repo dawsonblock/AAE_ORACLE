@@ -378,12 +378,12 @@ class ExperimentResultService:
         return "; ".join(parts)
 
 
-# Global service instance
-_experiment_result_service = ExperimentResultService()
+# Note:
+# The previous global `_experiment_result_service` instance and
+# `process_experiment_result` convenience function have been removed
+# to avoid using a default-constructed `ExperimentResultService`
+# without persistence or structured logging configured.
+# Callers should instead instantiate `ExperimentResultService` with
+# the appropriate stores/logger and invoke
+# `service.process_experiment_result(request)` directly.
 
-
-def process_experiment_result(
-    request: ExperimentResultRequest
-) -> ExperimentResultResponse:
-    """Convenience function for processing experiment results."""
-    return _experiment_result_service.process_experiment_result(request)
