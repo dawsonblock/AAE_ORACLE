@@ -68,10 +68,18 @@ class RankingStore:
         )
         return [dict(row) for row in cursor.fetchall()]
 
-    def get_all_scores(self) -> Dict[str, float]:
-        """Get all candidate scores as a flat dict (candidate_id -> score)."""
-        cursor = self.conn.execute("SELECT candidate_id, score FROM rankings")
-        return {row["candidate_id"]: row["score"] for row in cursor.fetchall()}
+    def get_all_scores(self) -> Dict[str, Dict[str, float]]:
+        """Get all candidate scores grouped by goal_id (goal_id -> {candidate_id -> score})."""
+        cursor = self.conn.execute("SELECT goal_id, candidate_id, score FROM rankings")
+        scores: Dict[str, Dict[str, float]] = {}
+        for row in cursor.fetchall():
+            goal_id = row["goal_id"]
+            candidate_id = row["candidate_id"]
+            score = row["score"]
+            if goal_id not in scores:
+                scores[goal_id] = {}
+            scores[goal_id][candidate_id] = score
+        return scores
 
     def close(self) -> None:
         self.conn.close()
