@@ -192,6 +192,11 @@ async def receive_experiment_result(
     request: ExperimentResultRequest
 ) -> dict:
     """Receive experiment execution results and return scoring feedback."""
+    # Ensure a trace_id is always present and consistent
+    trace_id = request.trace_id or generate_trace_id()
+    if request.trace_id is None:
+        request.trace_id = trace_id
+
     result = process_experiment_result(request)
     
     # Persist to experiment store
@@ -202,7 +207,7 @@ async def receive_experiment_result(
         score=result.score,
         failure_mode=result.failure_mode,
         repair_usefulness=result.repair_usefulness,
-        trace_id=request.trace_id,
+        trace_id=trace_id,
     )
 
     # Record test result for observability
