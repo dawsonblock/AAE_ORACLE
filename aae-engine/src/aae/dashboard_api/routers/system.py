@@ -7,24 +7,29 @@ from aae.analysis.replay import ReplayEngine
 
 router = APIRouter(prefix='/api/system', tags=['system'])
 
-# File-backed SQLite for persistent experiment data
-_store = ExperimentStore(db="experiments.db")
-_replay = ReplayEngine(experiment_store=_store)
+# Factory for file-backed SQLite experiment store to avoid sharing a single
+# SQLite connection across concurrent FastAPI requests.
+def get_experiment_store() -> ExperimentStore:
+    return ExperimentStore(db="experiments.db")
 
 
 @router.get('/experiments')
 async def list_experiments(limit: int = 100):
     """List all experiments for the dashboard."""
-    return _store.get_all(limit=limit)
+    store = get_experiment_store()
+    return store.get_all(limit=limit)
 
 
 @router.get('/experiments/{goal_id}')
 async def get_goal_experiments(goal_id: str):
     """Get experiments for a specific goal."""
-    return _store.get_history(goal_id)
+    store = get_experiment_store()
+    return store.get_history(goal_id)
 
 
 @router.get('/replay/{goal_id}')
 async def replay_goal(goal_id: str):
     """Full replay of a goal's history."""
-    return _replay.get_goal_history(goal_id)
+    store = get_experiment_store()
+    replay = ReplayEngine(experiment_store=store)
+    return replay.get_goal_history(goal_id)
