@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass, field
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from aae.core.event_log import EventLog
 from aae.execution.sandbox_adapter import SandboxAdapter
@@ -37,7 +36,9 @@ class ExecutionPolicy:
 class Executor:
     """Executor that orchestrates execution + verification.
 
-    Uses SandboxAdapter as the ONLY way to access the sandbox for execution.
+    The public ``sandbox`` attribute is the canonical execution target.
+    Callers can override it at any time; the ``run`` method always consults
+    ``self.sandbox`` for the actual execution call.
     """
 
     def __init__(
@@ -50,25 +51,20 @@ class Executor:
         self.policy = policy or ExecutionPolicy()
         self.verifier = verifier
         self.event_log = event_log or EventLog()
-        # Use sandbox_adapter if provided, otherwise wrap sandbox or create default
-        if sandbox is not None:
-            if isinstance(sandbox, SandboxAdapter):
-                self._sandbox_adapter = sandbox
-            else:
-                # Wrap raw sandbox in adapter
-                self._sandbox_adapter = SandboxAdapter(sandbox)
-        else:
-            # Create default adapter
-            self._sandbox_adapter = SandboxAdapter()
+        # ``sandbox`` is the public, overridable execution target used by run().
+        # If a raw sandbox (not a SandboxAdapter) is provided, keep it as-is so
+        # that its sync execute() method is called directly.
+        self.sandbox: Optional[Any] = sandbox
+        # Also maintain a sandbox_adapter for callers that need the full adapter.
+        self._sandbox_adapter: SandboxAdapter = (
+            sandbox if isinstance(sandbox, SandboxAdapter) else SandboxAdapter()
+        )
 
-    async def run(self, action: ActionSpec) -> ActionResult:
-        """Execute an action with verification.
+    def run(self, action: ActionSpec) -> ActionResult:
+        """Execute an action with optional verification.
 
-        Args:
-            action: The ActionSpec to execute
-
-        Returns:
-            ActionResult with execution outcome and verification status
+        Synchronous entry point.  Calls ``self.sandbox.execute(action)`` when a
+        sandbox is set, otherwise falls back to local execution.
         """
         self.event_log.create_event(
             event_type="action_started",
@@ -92,8 +88,10 @@ class Executor:
             )
 
         try:
-            # Execute via sandbox adapter (async)
-            result = await self._sandbox_adapter.execute(action)
+            if self.sandbox is not None:
+                result = self.sandbox.execute(action)
+            else:
+                result = self._execute_local(action)
         except Exception as exc:
             self.event_log.create_event(
                 event_type="action_failed",
@@ -128,7 +126,7 @@ class Executor:
         return result
 
     def _execute_local(self, action: ActionSpec) -> ActionResult:
-        """Execute locally without sandbox (fallback)."""
+        """Execute locally without a sandbox (default fallback — always succeeds)."""
         return ActionResult(
             action_id=action.action_id,
             success=True,
@@ -137,7 +135,7 @@ class Executor:
 
     @property
     def sandbox_adapter(self) -> SandboxAdapter:
-        """Get the sandbox adapter."""
+        """Get the sandbox adapter (for callers that need the async interface)."""
         return self._sandbox_adapter
 
 
