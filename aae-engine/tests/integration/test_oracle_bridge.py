@@ -1098,7 +1098,7 @@ def test_oracle_verification_rejects_all_candidates():
     
     # The system should handle this gracefully (no valid candidates)
     # This tests the abort handling path
-    assert len(validation_result['allRejectionReasons']) > 0
+    assert len(validation_result['rejection_reasons']) > 0
 
 
 # ============================================================================

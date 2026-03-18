@@ -104,8 +104,10 @@ class OraclePlanResponse(BaseModel):
         return [c for c in self.candidates if c.requires_approval()]
 
     def get_valid_candidates(self) -> List[OracleCandidateCommand]:
-        """Return all valid candidates (no validation errors)."""
-        return self.candidates
+        """Return candidates that pass deferred validation."""
+        report = validate_candidates(self.candidates)
+        rejected_ids = set(report["rejection_reasons"].keys())
+        return [c for c in self.candidates if c.candidate_id not in rejected_ids]
 
 
 # MARK: - Validation Utility
@@ -163,7 +165,6 @@ def validate_candidates(candidates: List[OracleCandidateCommand]) -> Dict[str, A
         "rejected_candidates": len(rejected),
         "requires_approval_candidates": requires_approval_ids,
         "rejection_reasons": rejection_reasons,
-        "allRejectionReasons": rejection_reasons,
     }
 
 
