@@ -15,6 +15,7 @@ public struct ExperimentOutcome: Sendable, Codable {
     public let safetyViolations: [SafetyViolation]
     public let elapsedTimeSeconds: Double
     public let executionStatus: ExecutionStatus
+    public let traceID: String?
 
     enum CodingKeys: String, CodingKey {
         case goalID = "goal_id"
@@ -28,6 +29,7 @@ public struct ExperimentOutcome: Sendable, Codable {
         case safetyViolations = "safety_violations"
         case elapsedTimeSeconds = "elapsed_time_seconds"
         case executionStatus = "execution_status"
+        case traceID = "trace_id"
     }
 
     public init(
@@ -41,7 +43,8 @@ public struct ExperimentOutcome: Sendable, Codable {
         domainEventSummary: String,
         safetyViolations: [SafetyViolation],
         elapsedTimeSeconds: Double,
-        executionStatus: ExecutionStatus
+        executionStatus: ExecutionStatus,
+        traceID: String? = UUID().uuidString
     ) {
         self.goalID = goalID
         self.candidateID = candidateID
@@ -54,6 +57,7 @@ public struct ExperimentOutcome: Sendable, Codable {
         self.safetyViolations = safetyViolations
         self.elapsedTimeSeconds = elapsedTimeSeconds
         self.executionStatus = executionStatus
+        self.traceID = traceID
     }
 }
 

@@ -2,13 +2,20 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
 # MARK: - Schema Version
 
 CANDIDATE_SCHEMA_VERSION = "aae.oracle_bridge.v1"
+
+
+# MARK: - Contract Version
+
+class ContractVersion(str, Enum):
+    """Versioned contract for Oracle ↔ AAE communication."""
+    V1 = "v1"
 
 
 # MARK: - Enums
@@ -67,12 +74,14 @@ class CandidateValidationError(Exception):
 # MARK: - Models
 
 class OraclePlanRequest(BaseModel):
+    version: Literal[ContractVersion.V1.value] = Field(default=ContractVersion.V1.value)
     goal_id: str = Field(default='oracle-goal')
     objective: str
     repo_path: Optional[str] = None
     state_summary: str = ''
     constraints: Dict[str, Any] = Field(default_factory=dict)
     max_candidates: int = Field(default=5, ge=1, le=20)
+    trace_id: Optional[str] = None
 
 
 class OracleCandidateCommand(BaseModel):
@@ -159,13 +168,15 @@ def validate_candidates(candidates: List[OracleCandidateCommand]) -> Dict[str, A
             if candidate.requires_approval():
                 requires_approval_ids.append(candidate.candidate_id)
 
-    return {
+    report = {
         "total_candidates": len(candidates),
         "valid_candidates": len(valid),
         "rejected_candidates": len(rejected),
         "requires_approval_candidates": requires_approval_ids,
         "rejection_reasons": rejection_reasons,
+        "allRejectionReasons": rejection_reasons,
     }
+    return report
 
 
 def validate_response(response: OraclePlanResponse) -> OraclePlanResponse:

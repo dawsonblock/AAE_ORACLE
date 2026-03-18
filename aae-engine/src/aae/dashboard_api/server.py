@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from aae.dashboard_api.deps import get_runtime_manager, set_runtime_manager
 from aae.dashboard_api.runtime_manager import RuntimeManager
-from aae.dashboard_api.routers import artifacts, benchmarks, events, health, integrations, oracle, settings, workflows
+from aae.dashboard_api.routers import artifacts, benchmarks, events, health, integrations, oracle, settings, system, workflows
 
 
 def create_app(runtime_manager: RuntimeManager | None = None) -> FastAPI:
@@ -48,6 +48,7 @@ def create_app(runtime_manager: RuntimeManager | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(integrations.router)
     app.include_router(oracle.router)
+    app.include_router(system.router)
 
     dist_dir = Path(__file__).resolve().parents[3] / "dashboard" / "dist"
     assets_dir = dist_dir / "assets"

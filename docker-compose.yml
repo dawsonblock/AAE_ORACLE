@@ -1,9 +1,22 @@
 version: "3.9"
 services:
-  aae-dashboard:
+  aae:
     build:
       context: ./aae-engine
     command: python -m aae.dashboard_api.server --host 0.0.0.0 --port 8787
     ports:
       - "8787:8787"
     working_dir: /app
+    volumes:
+      - ./logs:/app/logs
+      - ./dashboard/dist:/app/dashboard/dist
+      - ./experiments.db:/app/experiments.db
+
+  dashboard:
+    image: nginx:alpine
+    volumes:
+      - ./dashboard/dist:/usr/share/nginx/html:ro
+    ports:
+      - "8080:80"
+    depends_on:
+      - aae
