@@ -74,7 +74,7 @@ class CandidateValidationError(Exception):
 # MARK: - Models
 
 class OraclePlanRequest(BaseModel):
-    version: str = Field(default=ContractVersion.V1.value)
+    version: Literal[ContractVersion.V1.value] = Field(default=ContractVersion.V1.value)
     goal_id: str = Field(default='oracle-goal')
     objective: str
     repo_path: Optional[str] = None
