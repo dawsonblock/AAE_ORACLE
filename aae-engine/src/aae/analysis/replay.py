@@ -28,7 +28,14 @@ class ReplayEngine:
         return self.store.get_history(goal)
 
     def get_trace_events(self, trace_id: str) -> List[Dict[str, Any]]:
-        """Retrieve all events sharing a trace ID from the JSONL log."""
+        """Retrieve all records sharing a trace ID.
+
+        If ``event_log_path`` is configured and the file exists, this method
+        returns JSONL-parsed event records from the structured event log.
+        Otherwise, it falls back to ``ExperimentStore.get_by_trace(...)`` and
+        returns experiment rows from SQLite. Callers should be prepared to
+        handle either schema.
+        """
         if not self.event_log_path or not os.path.exists(self.event_log_path):
             return self.store.get_by_trace(trace_id)
 
