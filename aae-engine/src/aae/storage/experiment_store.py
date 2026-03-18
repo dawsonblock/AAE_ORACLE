@@ -15,12 +15,23 @@ class ExperimentStore:
     """SQLite-backed experiment store for persistent learning history."""
 
     def __init__(self, db: str = "experiments.db"):
-        self.conn = sqlite3.connect(db, check_same_thread=False)
-        self.conn.row_factory = sqlite3.Row
+        # Store only the database path and use per-operation connections to
+        # avoid sharing a single connection across threads.
+        self._db_path = db
         self._create_tables()
 
+    def _connect(self) -> sqlite3.Connection:
+        """Create a new SQLite connection for a single operation."""
+        conn = sqlite3.connect(self._db_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        # Reduce 'database is locked' errors under concurrent access.
+        conn.execute("PRAGMA busy_timeout=3000")
+        return conn
+
     def _create_tables(self) -> None:
-        self.conn.execute("""
+        with self._connect() as conn:
+            conn.execute(
+                """
         CREATE TABLE IF NOT EXISTS experiments (
             id TEXT PRIMARY KEY,
             goal TEXT NOT NULL,
@@ -32,8 +43,8 @@ class ExperimentStore:
             trace_id TEXT,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
-        """)
-        self.conn.commit()
+        """
+            )
 
     def log(
         self,
@@ -47,57 +58,63 @@ class ExperimentStore:
     ) -> str:
         """Log an experiment result. Returns the experiment ID."""
         experiment_id = str(uuid.uuid4())
-        self.conn.execute(
-            """INSERT INTO experiments
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO experiments
                (id, goal, candidate_id, result, score, failure_mode,
                 repair_usefulness, trace_id, timestamp)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                experiment_id,
-                goal,
-                candidate_id,
-                result,
-                score,
-                failure_mode,
-                repair_usefulness,
-                trace_id,
-                datetime.now(timezone.utc).isoformat(),
-            ),
-        )
-        self.conn.commit()
+                (
+                    experiment_id,
+                    goal,
+                    candidate_id,
+                    result,
+                    score,
+                    failure_mode,
+                    repair_usefulness,
+                    trace_id,
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
         return experiment_id
 
     def get_history(self, goal: str) -> List[Dict[str, Any]]:
         """Retrieve full experiment history for a goal."""
-        cursor = self.conn.execute(
-            "SELECT * FROM experiments WHERE goal = ? ORDER BY timestamp ASC",
-            (goal,),
-        )
-        return [dict(row) for row in cursor.fetchall()]
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM experiments WHERE goal = ? ORDER BY timestamp ASC",
+                (goal,),
+            )
+            return [dict(row) for row in cursor.fetchall()]
 
     def get_by_candidate(self, candidate_id: str) -> List[Dict[str, Any]]:
         """Retrieve experiments for a specific candidate."""
-        cursor = self.conn.execute(
-            "SELECT * FROM experiments WHERE candidate_id = ? ORDER BY timestamp ASC",
-            (candidate_id,),
-        )
-        return [dict(row) for row in cursor.fetchall()]
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM experiments WHERE candidate_id = ? ORDER BY timestamp ASC",
+                (candidate_id,),
+            )
+            return [dict(row) for row in cursor.fetchall()]
 
     def get_by_trace(self, trace_id: str) -> List[Dict[str, Any]]:
         """Retrieve all experiments sharing a trace ID."""
-        cursor = self.conn.execute(
-            "SELECT * FROM experiments WHERE trace_id = ? ORDER BY timestamp ASC",
-            (trace_id,),
-        )
-        return [dict(row) for row in cursor.fetchall()]
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM experiments WHERE trace_id = ? ORDER BY timestamp ASC",
+                (trace_id,),
+            )
+            return [dict(row) for row in cursor.fetchall()]
 
     def get_all(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Retrieve most recent experiments."""
-        cursor = self.conn.execute(
-            "SELECT * FROM experiments ORDER BY timestamp DESC LIMIT ?",
-            (limit,),
-        )
-        return [dict(row) for row in cursor.fetchall()]
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM experiments ORDER BY timestamp DESC LIMIT ?",
+                (limit,),
+            )
+            return [dict(row) for row in cursor.fetchall()]
 
     def close(self) -> None:
-        self.conn.close()
+        """Placeholder for API compatibility; connections are per-operation."""
+        # No persistent connection to close.
+        return None
