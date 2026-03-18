@@ -10,6 +10,7 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./dashboard/dist:/app/dashboard/dist
+      - ./experiments.db:/app/experiments.db
 
   dashboard:
     image: nginx:alpine
