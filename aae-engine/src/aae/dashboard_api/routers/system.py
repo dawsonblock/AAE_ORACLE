@@ -7,8 +7,8 @@ from aae.analysis.replay import ReplayEngine
 
 router = APIRouter(prefix='/api/system', tags=['system'])
 
-# In-memory SQLite for portability
-_store = ExperimentStore(db=":memory:")
+# File-backed SQLite for persistent experiment data
+_store = ExperimentStore(db="experiments.db")
 _replay = ReplayEngine(experiment_store=_store)
 
 

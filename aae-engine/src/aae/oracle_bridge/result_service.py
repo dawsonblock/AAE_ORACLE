@@ -19,6 +19,10 @@ from aae.analysis.structured_logger import StructuredEventLogger
 
 logger = logging.getLogger(__name__)
 
+# Scoring policy constants
+ACCEPTANCE_THRESHOLD = 0.4
+FAILURE_PENALTY = -0.5
+
 
 # MARK: - In-Memory Ranking Store (legacy fallback)
 
@@ -161,7 +165,7 @@ class ExperimentResultService:
         self._log_event(request, score, failure_mode, trace_id)
 
         # Step 7: Update telemetry
-        if score >= 0.4:
+        if score >= ACCEPTANCE_THRESHOLD:
             _telemetry.record_acceptance()
         else:
             reason = failure_mode or "low_score"
@@ -198,7 +202,7 @@ class ExperimentResultService:
                 trace_id=trace_id,
             )
         if self._persistent_ranking_store:
-            delta = score if request.execution_status == "success" else -0.5
+            delta = score if request.execution_status == "success" else FAILURE_PENALTY
             self._persistent_ranking_store.update(
                 request.candidate_id, request.goal_id, delta
             )

@@ -7,6 +7,11 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+# Scoring constants
+EXPECTED_ARTIFACT_COUNT = 5.0
+MAX_ACCEPTABLE_LATENCY_MS = 2000.0
+NEUTRAL_TEST_SCORE = 0.5
+
 
 class ExperimentEvaluator:
     """Score experiment outcomes using multiple evaluation signals."""
@@ -22,11 +27,11 @@ class ExperimentEvaluator:
 
         # artifact presence (normalized to 0-1)
         artifacts = result.get("artifacts", [])
-        metrics["artifact_count"] = min(len(artifacts) / 5.0, 1.0) if artifacts else 0.0
+        metrics["artifact_count"] = min(len(artifacts) / EXPECTED_ARTIFACT_COUNT, 1.0) if artifacts else 0.0
 
-        # latency penalty (lower is better, cap at 2s)
+        # latency penalty (lower is better, capped at MAX_ACCEPTABLE_LATENCY_MS)
         latency = result.get("latency_ms", 1000)
-        metrics["latency_score"] = max(0.0, 1.0 - (latency / 2000.0))
+        metrics["latency_score"] = max(0.0, 1.0 - (latency / MAX_ACCEPTABLE_LATENCY_MS))
 
         # test pass rate
         test_passed = result.get("tests_passed", 0)
@@ -34,7 +39,7 @@ class ExperimentEvaluator:
         if test_total > 0:
             metrics["test_pass_rate"] = test_passed / test_total
         else:
-            metrics["test_pass_rate"] = 0.5  # neutral when no tests
+            metrics["test_pass_rate"] = NEUTRAL_TEST_SCORE
 
         # safety — no violations
         violations = result.get("safety_violations", [])

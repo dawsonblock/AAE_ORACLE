@@ -337,8 +337,11 @@ public actor OracleAAECandidateValidator {
 
     // MARK: - Capability Gating (Phase 8)
 
+    /// Default confidence threshold for gating.
+    public static let defaultConfidenceThreshold: Double = 0.6
+
     /// Reject candidates below confidence threshold.
-    public func enforceConfidenceGate(_ candidate: OracleAAECandidate, threshold: Double = 0.6) throws {
+    public func enforceConfidenceGate(_ candidate: OracleAAECandidate, threshold: Double = defaultConfidenceThreshold) throws {
         if candidate.confidence < threshold {
             throw CapabilityGatingError.lowConfidence(candidate.confidence)
         }

@@ -19,8 +19,8 @@ from aae.storage.experiment_store import ExperimentStore
 router = APIRouter(prefix='/api/oracle', tags=['oracle'])
 BRIDGE = OraclePlanningBridge()
 
-# Persistent stores (initialized lazily with in-memory SQLite for portability)
-_experiment_store = ExperimentStore(db=":memory:")
+# Persistent stores (file-backed SQLite for data that survives restarts)
+_experiment_store = ExperimentStore(db="experiments.db")
 _replay_engine = ReplayEngine(experiment_store=_experiment_store)
 _event_logger = StructuredEventLogger()
 

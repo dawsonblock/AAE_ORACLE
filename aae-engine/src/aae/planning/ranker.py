@@ -14,6 +14,9 @@ if TYPE_CHECKING:
 class CandidateRanker:
     """Rank candidates using confidence and historical score priors."""
 
+    CONFIDENCE_WEIGHT = 0.7
+    PRIOR_WEIGHT = 0.3
+
     def __init__(self, ranking_store: "RankingStore"):
         self.ranking_store = ranking_store
 
@@ -37,6 +40,6 @@ class CandidateRanker:
             cid = getattr(c, "candidate_id", getattr(c, "id", ""))
             prior = self.ranking_store.get_score(cid, goal_id)
             confidence = getattr(c, "confidence", 0.0)
-            return (confidence * 0.7) + (prior * 0.3)
+            return (confidence * self.CONFIDENCE_WEIGHT) + (prior * self.PRIOR_WEIGHT)
 
         return sorted(candidates, key=_score, reverse=True)
