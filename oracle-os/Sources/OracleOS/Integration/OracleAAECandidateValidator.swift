@@ -37,8 +37,9 @@ public enum OracleAAESafetyClass: String, CaseIterable, Sendable {
     }
 }
 
-/// Strict candidate type for fail-fast decoding.
-/// Matches Literal["patch", "refactor", "config"] on the Python side.
+/// Strict candidate type for fail-fast decoding within the Swift client.
+/// Note: this enum is an internal classification and does not directly mirror
+/// the Python-side candidate kind strings.
 public enum CandidateType: String, Codable, Sendable {
     case patch
     case refactor
