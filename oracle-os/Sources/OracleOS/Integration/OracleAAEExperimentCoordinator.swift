@@ -44,7 +44,7 @@ public struct ExperimentOutcome: Sendable, Codable {
         safetyViolations: [SafetyViolation],
         elapsedTimeSeconds: Double,
         executionStatus: ExecutionStatus,
-        traceID: String? = nil
+        traceID: String? = UUID().uuidString
     ) {
         self.goalID = goalID
         self.candidateID = candidateID
