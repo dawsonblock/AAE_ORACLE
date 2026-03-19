@@ -8,6 +8,15 @@ from typing import Any, Dict, Iterable, List, Tuple
 from fastapi import FastAPI, HTTPException
 
 from aae.oracle_bridge.contracts import Candidate, ContractVersion, PlanRequest
+from aae.oracle_bridge.oracle_adapters import (
+    CANDIDATE_SCHEMA_VERSION,
+    OracleCandidateCommand,
+    OraclePlanRequest,
+    OraclePlanResponse,
+    convert_oracle_request,
+    convert_oracle_response,
+    validate_response,
+)
 from aae.observability.event_logger import EventLogger
 from aae.planning.planner import Planner
 
@@ -91,7 +100,26 @@ class OraclePlanningBridge:
         ".c",
     }
 
-    def plan(self, request: PlanRequest) -> List[Candidate]:
+    def plan(self, request: PlanRequest | OraclePlanRequest) -> List[Candidate] | OraclePlanResponse:
+        if isinstance(request, OraclePlanRequest):
+            summary, warnings, test_command = self.describe_oracle_request(
+                repo_path=request.repo_path,
+                objective=request.objective,
+                state_summary=request.state_summary,
+            )
+            response = OraclePlanResponse(
+                goal_id=request.goal_id,
+                engine=CANDIDATE_SCHEMA_VERSION,
+                summary=summary,
+                warnings=warnings,
+                candidates=self._build_candidates(request, summary, test_command)[: request.max_candidates],
+            )
+            if any(candidate.confidence < 0.9 for candidate in response.candidates):
+                response.warnings.append("Low confidence candidates returned")
+            return validate_response(response)
+        return self._plan_canonical(request)
+
+    def _plan_canonical(self, request: PlanRequest) -> List[Candidate]:
         raw_candidates = planner.generate(
             source_code=request.source_code,
             target_files=request.target_files,
@@ -212,6 +240,135 @@ class OraclePlanningBridge:
         if language == "go":
             return "go test ./..."
         return "run repo-native test command"
+
+    def plan_oracle_from_canonical(
+        self,
+        *,
+        request: OraclePlanRequest,
+        candidates: List[Candidate],
+    ) -> OraclePlanResponse:
+        summary, warnings, test_command = self.describe_oracle_request(
+            repo_path=request.repo_path,
+            objective=request.objective,
+            state_summary=request.state_summary,
+        )
+        return convert_oracle_response(
+            goal_id=request.goal_id,
+            candidates=candidates,
+            summary=summary,
+            warnings=warnings,
+            recommended_test_command=test_command,
+            max_candidates=request.max_candidates,
+        )
+
+    def _build_candidates(
+        self,
+        request: OraclePlanRequest,
+        summary: Dict[str, Any],
+        test_command: str,
+    ) -> List[OracleCandidateCommand]:
+        objective = request.objective.lower()
+        candidate_paths = summary.get("repo_profile", {}).get("candidate_paths", [])
+        preferred_path = candidate_paths[0] if candidate_paths else None
+        candidates = [
+            OracleCandidateCommand(
+                candidate_id=f"{request.goal_id}-inspect",
+                kind="aae.inspect_repository",
+                tool="repository_analyzer",
+                payload={"repo_path": request.repo_path, "candidate_paths": candidate_paths},
+                rationale="Build a grounded repository profile before selecting a mutation or execution path.",
+                confidence=0.95,
+                predicted_score=0.70,
+                safety_class="read_only",
+            )
+        ]
+
+        if self._contains_any(objective, {"test", "tests", "pytest", "xctest", "unit", "integration", "regression"}) or any(
+            "test" in path.lower() for path in candidate_paths
+        ):
+            candidates.append(
+                OracleCandidateCommand(
+                    candidate_id=f"{request.goal_id}-tests",
+                    kind="aae.run_targeted_tests",
+                    tool="sandbox",
+                    payload={"command": test_command, "candidate_paths": candidate_paths},
+                    rationale="Reproduce the current failure surface and capture a precise test baseline.",
+                    confidence=0.92,
+                    predicted_score=0.76,
+                    safety_class="sandboxed_write",
+                )
+            )
+
+        repair_words = {"fix", "repair", "bug", "patch", "failing", "failure", "regression", "broken"}
+        if self._contains_any(objective, repair_words) or self._contains_any(request.state_summary.lower(), repair_words):
+            candidates.extend(
+                [
+                    OracleCandidateCommand(
+                        candidate_id=f"{request.goal_id}-localize",
+                        kind="aae.localize_failure",
+                        tool="localization_service",
+                        payload={"candidate_paths": candidate_paths},
+                        rationale="Fuse failure symptoms, repository structure, and test evidence into a smaller edit region.",
+                        confidence=0.90,
+                        predicted_score=0.82,
+                        safety_class="read_only",
+                    ),
+                    OracleCandidateCommand(
+                        candidate_id=f"{request.goal_id}-patch",
+                        kind="aae.generate_patch",
+                        tool="patch_engine",
+                        payload={"candidate_paths": candidate_paths, "workspace_relative_path": preferred_path},
+                        rationale="Generate a bounded candidate patch after localization narrows the edit surface.",
+                        confidence=0.90,
+                        predicted_score=0.79,
+                        safety_class="sandboxed_write",
+                        target_file=preferred_path,
+                    ),
+                    OracleCandidateCommand(
+                        candidate_id=f"{request.goal_id}-verify",
+                        kind="aae.validate_candidate",
+                        tool="verifier",
+                        payload={"command": test_command, "candidate_paths": candidate_paths},
+                        rationale="Run the candidate through the repository test command before Oracle accepts execution.",
+                        confidence=0.84,
+                        predicted_score=0.77,
+                        safety_class="sandboxed_write",
+                    ),
+                ]
+            )
+
+        if self._contains_any(objective, {"refactor", "cleanup", "restructure", "harden", "simplify"}):
+            candidates.append(
+                OracleCandidateCommand(
+                    candidate_id=f"{request.goal_id}-impact",
+                    kind="aae.estimate_change_impact",
+                    tool="graph_service",
+                    payload={"candidate_paths": candidate_paths},
+                    rationale="Estimate dependency blast radius before a broad structural edit.",
+                    confidence=0.83,
+                    predicted_score=0.74,
+                    safety_class="read_only",
+                )
+            )
+
+        if len(candidates) == 1:
+            candidates.append(
+                OracleCandidateCommand(
+                    candidate_id=f"{request.goal_id}-analyze",
+                    kind="aae.analyze_objective",
+                    tool="planner_service",
+                    payload={"candidate_paths": candidate_paths},
+                    rationale="Produce a ranked next-step analysis when no stronger repo-specific signal is available.",
+                    confidence=0.80,
+                    predicted_score=0.65,
+                    safety_class="read_only",
+                )
+            )
+        return candidates
+
+    @staticmethod
+    def _contains_any(text: str, words: set[str]) -> bool:
+        return any(word in text for word in words)
 
     @staticmethod
     def _normalize_candidates(raw_candidates: List[Dict[str, Any]] | List[Candidate]) -> List[Candidate]:

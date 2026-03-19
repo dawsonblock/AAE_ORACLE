@@ -5,7 +5,9 @@ from pathlib import Path
 
 class BenchmarkLoader:
     def __init__(self, cases_dir="benchmarks/cases"):
-        self.cases_dir = Path(cases_dir)
+        base_dir = Path(__file__).resolve().parents[3]
+        candidate_dir = Path(cases_dir)
+        self.cases_dir = candidate_dir if candidate_dir.is_absolute() else base_dir / candidate_dir
 
     def load_all(self, language=None):
         """Loads all benchmark cases, optionally filtered by language."""

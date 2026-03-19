@@ -15,7 +15,6 @@ from aae.oracle_bridge.oracle_adapters import (
     OraclePlanRequest,
     OracleExperimentResultRequest,
     convert_oracle_request,
-    convert_oracle_response,
     convert_oracle_result_request,
 )
 from aae.oracle_bridge.result_service import ResultService, get_telemetry
@@ -147,24 +146,19 @@ async def plan(request: OraclePlanRequest):
         # Propagate generated trace_id back onto the request for downstream logging/observability
         request.trace_id = trace_id
     canonical_request: PlanRequest = convert_oracle_request(request)
-    summary, warnings, recommended_test_command = BRIDGE.describe_oracle_request(
-        repo_path=request.repo_path,
-        objective=request.objective,
-        state_summary=request.state_summary,
-    )
 
     start = time.perf_counter()
-    canonical_candidates = BRIDGE.plan(canonical_request)
+    response_model = BRIDGE.plan(request)
     duration_ms = (time.perf_counter() - start) * 1000
 
-    for candidate in canonical_candidates:
+    for candidate in response_model.candidates:
         _event_logger.log(
             {
                 "stage": "candidate",
                 "goal_id": request.goal_id,
                 "trace_id": trace_id,
-                "candidate_id": candidate.id,
-                "kind": candidate.type.value,
+                "candidate_id": candidate.candidate_id,
+                "kind": candidate.kind,
                 "confidence": candidate.confidence,
                 "source": "aae_advised",
             }
@@ -175,20 +169,13 @@ async def plan(request: OraclePlanRequest):
             "stage": "plan",
             "goal_id": request.goal_id,
             "trace_id": trace_id,
-            "candidate_count": len(canonical_candidates),
+            "candidate_count": len(response_model.candidates),
             "latency_ms": round(duration_ms, 2),
             "canonical_request": canonical_request.model_dump(mode="json"),
         }
     )
 
-    response = convert_oracle_response(
-        goal_id=request.goal_id,
-        candidates=canonical_candidates,
-        summary=summary,
-        warnings=warnings,
-        recommended_test_command=recommended_test_command,
-        max_candidates=request.max_candidates,
-    ).model_dump()
+    response = response_model.model_dump()
     response["trace_id"] = trace_id
     return response
 

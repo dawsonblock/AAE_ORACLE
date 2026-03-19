@@ -10,7 +10,10 @@ That script is the canonical environment entrypoint for local verification and C
 
 ## What it does
 
-`bootstrap_python.sh` performs exactly these steps from the repository root:
+`bootstrap_python.sh` performs these steps from the repository root after
+selecting `python` or, when unavailable on the worker image, `python3` for the
+initial venv creation. If stdlib `venv` is unavailable on the worker image, the
+script bootstraps `virtualenv` once and still creates the same `.venv` target:
 
 ```bash
 python -m venv .venv
