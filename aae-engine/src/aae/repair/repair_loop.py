@@ -23,12 +23,28 @@ class RepairLoop:
 
     def run(
         self,
-        project_path: str,
-        source_code: str,
+        project_path: str | Dict[str, Any],
+        source_code: str | Dict[str, Any],
         file_path: str,
         trace_id: Optional[str] = None,
         goal_id: str = "repair",
     ) -> Dict[str, Any]:
+        if isinstance(project_path, dict):
+            sandbox_result = project_path
+            patch_candidate = source_code if isinstance(source_code, dict) else {}
+            failures = self.localizer.extract(
+                str(sandbox_result.get("stdout", "")) + "\n" + str(sandbox_result.get("stderr", ""))
+            )
+            return {
+                "status": "completed",
+                "trace_id": trace_id,
+                "goal_id": goal_id,
+                "failures": failures,
+                "best_score": 0.0,
+                "best_candidate": patch_candidate,
+                "applied": False,
+            }
+
         self.event_logger.log(
             {
                 "stage": "repair_start",
