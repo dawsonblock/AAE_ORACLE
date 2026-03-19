@@ -387,3 +387,5 @@ class ExperimentResultService:
 # the appropriate stores/logger and invoke
 # `service.process_experiment_result(request)` directly.
 
+ResultService = ExperimentResultService
+

@@ -8,7 +8,11 @@ from pathlib import Path
 import re
 from typing import Any, Dict, Iterable, List, Tuple
 
+from fastapi import FastAPI
+
 from .contracts import OracleCandidateCommand, OraclePlanRequest, OraclePlanResponse, validate_response
+
+app = FastAPI()
 
 # Configure observability logger
 observability_logger = logging.getLogger("aae.oracle_bridge.observability")
