@@ -83,7 +83,7 @@ def plan(request: PlanRequest):
         )
         _metrics["rejected"] += 1
         _metrics["rejection_reasons"]["planner_error"] += 1
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Planner error")
 
 
 class OraclePlanningBridge:
