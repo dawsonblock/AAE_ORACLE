@@ -7,13 +7,12 @@ from typing import Any, Dict, Iterable, List, Tuple
 
 from fastapi import FastAPI, HTTPException
 
-from aae.oracle_bridge.contracts import (
+from aae.oracle_bridge.contracts import Candidate, ContractVersion, PlanRequest
+from aae.oracle_bridge.oracle_adapters import (
     CANDIDATE_SCHEMA_VERSION,
-    ContractVersion,
     OracleCandidateCommand,
     OraclePlanRequest,
     OraclePlanResponse,
-    PlanRequest,
     validate_response,
 )
 from aae.observability.event_logger import EventLogger
@@ -54,11 +53,12 @@ def plan(request: PlanRequest):
     trace_id = request.trace_id or str(uuid.uuid4())
 
     try:
-        candidates = planner.generate(
+        raw_candidates = planner.generate(
             source_code=request.source_code,
             target_files=request.target_files,
             trace_id=trace_id,
         )
+        candidates = [Candidate.model_validate(candidate) for candidate in raw_candidates]
         _event_logger.log(
             {
                 "stage": "plan",
@@ -70,7 +70,7 @@ def plan(request: PlanRequest):
         _metrics["accepted"] += 1
         return {
             "trace_id": trace_id,
-            "candidates": candidates,
+            "candidates": [candidate.model_dump(mode="json") for candidate in candidates],
         }
     except Exception as exc:
         _event_logger.log(

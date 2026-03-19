@@ -68,8 +68,8 @@ class SafetyViolation(BaseModel):
     line_number: Optional[int] = None
 
 
-class ExperimentResultRequest(BaseModel):
-    """Request schema for experiment result submission."""
+class OracleExperimentResultRequest(BaseModel):
+    """Oracle-specific result payload that adapts into the canonical ingest contract."""
     goal_id: str
     candidate_id: str
     command_executed: str
@@ -117,3 +117,7 @@ class ExperimentResultResponse(BaseModel):
                 if self.updated_candidate_ranking else None
             )
         }
+
+
+# Backward-compatible alias for older imports.
+ExperimentResultRequest = OracleExperimentResultRequest

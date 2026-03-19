@@ -9,7 +9,7 @@ __all__ = [
 
 def __getattr__(name: str):
     if name == "OraclePlanRequest":
-        from .contracts import OraclePlanRequest
+        from .oracle_adapters import OraclePlanRequest
 
         return OraclePlanRequest
     if name == "OraclePlanningBridge":

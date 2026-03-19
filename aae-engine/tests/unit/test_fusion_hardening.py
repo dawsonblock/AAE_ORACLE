@@ -23,7 +23,8 @@ from aae.analysis.experiment_evaluator import ExperimentEvaluator
 from aae.analysis.structured_logger import StructuredEventLogger, generate_trace_id
 from aae.analysis.replay import ReplayEngine
 from aae.planning.ranker import CandidateRanker
-from aae.oracle_bridge.contracts import ContractVersion, OraclePlanRequest
+from aae.oracle_bridge.contracts import ContractVersion
+from aae.oracle_bridge.oracle_adapters import OraclePlanRequest
 from aae.oracle_bridge.result_service import RejectionTelemetry
 
 

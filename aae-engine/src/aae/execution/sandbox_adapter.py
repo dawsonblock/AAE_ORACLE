@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import os
 import subprocess
+from shutil import which
 import tempfile
 import time
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, Optional
+
+from aae.execution.execution_guard import ExecutionGuard
 
 
 @dataclass
@@ -22,12 +25,23 @@ class ExecutionResult:
 
 
 class SandboxAdapter:
-    def __init__(self, python_bin: str = "python") -> None:
-        self.python_bin = python_bin
+    def __init__(self, python_bin: str | None = None) -> None:
+        self.python_bin = python_bin or which("python") or which("python3") or "python3"
 
-    def run(self, code: str, timeout: int = 10) -> Dict[str, Any]:
+    def run(self, code: str, timeout: int = 10, context: str = "sandbox") -> Dict[str, Any]:
+        ExecutionGuard.assert_sandbox(context)
         start = time.perf_counter()
         tmp_path = None
+
+        if len(code) > 20000:
+            return {
+                "status": "rejected",
+                "stdout": "",
+                "stderr": "",
+                "returncode": -1,
+                "error": "code too large",
+                "latency_ms": 0.0,
+            }
 
         try:
             with tempfile.NamedTemporaryFile(
