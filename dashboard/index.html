@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AAE Dashboard</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 2rem;
+        background: #111827;
+        color: #f9fafb;
+      }
+      main {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      }
+      section {
+        background: #1f2937;
+        border-radius: 12px;
+        padding: 1rem;
+      }
+      h1,
+      h2 {
+        margin-top: 0;
+      }
+      input,
+      button {
+        font: inherit;
+        padding: 0.5rem 0.75rem;
+        border-radius: 8px;
+        border: 1px solid #374151;
+      }
+      button {
+        background: #2563eb;
+        color: white;
+        cursor: pointer;
+      }
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>AAE Runtime Dashboard</h1>
+    <main>
+      <section>
+        <h2>Recent Experiments</h2>
+        <p>Shows the latest persisted experiment records.</p>
+        <pre id="recent-experiments">Loading...</pre>
+      </section>
+
+      <section>
+        <h2>Replay by Trace ID</h2>
+        <p>Load all persisted events for a trace.</p>
+        <div>
+          <input id="trace-id" placeholder="trace-id" />
+          <button id="load-trace">Replay</button>
+        </div>
+        <pre id="trace-output">Enter a trace ID to replay.</pre>
+      </section>
+
+      <section>
+        <h2>Score Chart</h2>
+        <p>A simple list of recent experiment scores.</p>
+        <pre id="score-chart">Loading...</pre>
+      </section>
+
+      <section>
+        <h2>Acceptance / Rejection Summary</h2>
+        <p>Counts derived from persisted experiment outcomes.</p>
+        <pre id="acceptance-summary">Loading...</pre>
+      </section>
+    </main>
+
+    <script>
+      async function loadRecent() {
+        const response = await fetch("/api/system/experiments");
+        const experiments = await response.json();
+        document.getElementById("recent-experiments").textContent = JSON.stringify(experiments, null, 2);
+
+        const accepted = experiments.filter((item) => item.accepted).length;
+        const rejected = experiments.length - accepted;
+        document.getElementById("acceptance-summary").textContent = JSON.stringify(
+          { accepted, rejected, total: experiments.length },
+          null,
+          2
+        );
+        document.getElementById("score-chart").textContent = experiments
+          .map((item) => `${item.candidate_id}: ${item.score}`)
+          .join("\n");
+      }
+
+      async function loadTrace() {
+        const traceId = document.getElementById("trace-id").value.trim();
+        if (!traceId) {
+          return;
+        }
+        const response = await fetch(`/api/system/experiments/${encodeURIComponent(traceId)}`);
+        const payload = await response.json();
+        document.getElementById("trace-output").textContent = JSON.stringify(payload, null, 2);
+      }
+
+      document.getElementById("load-trace").addEventListener("click", loadTrace);
+      loadRecent().catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        document.getElementById("recent-experiments").textContent = message;
+        document.getElementById("score-chart").textContent = message;
+        document.getElementById("acceptance-summary").textContent = message;
+      });
+    </script>
+  </body>
+</html>

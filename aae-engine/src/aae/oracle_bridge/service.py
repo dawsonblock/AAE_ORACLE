@@ -16,10 +16,12 @@ from aae.oracle_bridge.contracts import (
     PlanRequest,
     validate_response,
 )
+from aae.observability.event_logger import EventLogger
 from aae.planning.planner import Planner
 
 app = FastAPI()
 planner = Planner()
+_event_logger = EventLogger()
 
 _metrics = {
     "accepted": 0,
@@ -57,12 +59,28 @@ def plan(request: PlanRequest):
             target_files=request.target_files,
             trace_id=trace_id,
         )
+        _event_logger.log(
+            {
+                "stage": "plan",
+                "trace_id": trace_id,
+                "goal": request.goal,
+                "candidate_count": len(candidates),
+            }
+        )
         _metrics["accepted"] += 1
         return {
             "trace_id": trace_id,
             "candidates": candidates,
         }
     except Exception as exc:
+        _event_logger.log(
+            {
+                "stage": "plan_error",
+                "trace_id": trace_id,
+                "goal": request.goal,
+                "error": str(exc),
+            }
+        )
         _metrics["rejected"] += 1
         _metrics["rejection_reasons"]["planner_error"] += 1
         raise HTTPException(status_code=500, detail=str(exc))

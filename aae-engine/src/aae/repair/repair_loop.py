@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 from aae.analysis.experiment_evaluator import ExperimentEvaluator
 from aae.analysis.failure_localizer import FailureLocalizer
 from aae.evaluation.test_harness import TestHarness
+from aae.observability.event_logger import EventLogger
 from aae.execution.patch_applier import PatchApplier
 from aae.oracle_bridge.result_service import ResultService
 from aae.planning.planner import Planner
@@ -18,6 +19,7 @@ class RepairLoop:
         self.evaluator = ExperimentEvaluator()
         self.result_service = ResultService()
         self.planner = Planner()
+        self.event_logger = EventLogger()
 
     def run(
         self,
@@ -27,6 +29,14 @@ class RepairLoop:
         trace_id: Optional[str] = None,
         goal_id: str = "repair",
     ) -> Dict[str, Any]:
+        self.event_logger.log(
+            {
+                "stage": "repair_start",
+                "trace_id": trace_id,
+                "goal_id": goal_id,
+                "file_path": file_path,
+            }
+        )
         baseline = self.harness.run(project_path)
         if baseline["status"] == "success":
             return {"status": "no_fix_needed", "trace_id": trace_id, "goal_id": goal_id}
@@ -69,6 +79,15 @@ class RepairLoop:
         if best_candidate is not None:
             self.applier.apply(file_path, best_candidate["diff"])
 
+        self.event_logger.log(
+            {
+                "stage": "repair_complete",
+                "trace_id": trace_id,
+                "goal_id": goal_id,
+                "best_score": best_score,
+                "applied": best_candidate is not None,
+            }
+        )
         return {
             "status": "completed",
             "trace_id": trace_id,
