@@ -20,7 +20,7 @@ public final class AgentLoop {
 
     /// NEW: IntentAPI-based orchestrator for the new execution spine.
     /// When set, the run loop should prefer this over legacy coordinator path.
-    public private(set) var orchestrator: (any IntentAPI)?
+    public let orchestrator: any IntentAPI
 
     /// NEW preferred init — uses RuntimeOrchestrator as the execution spine.
     /// This is the target architecture: AgentLoop becomes a thin wrapper that
@@ -44,80 +44,6 @@ public final class AgentLoop {
         worldModel: WorldStateModel = WorldStateModel()
     ) {
         self.orchestrator = orchestrator
-        self.planner = planner
-        self.graphStore = graphStore
-        self.stateMemoryIndex = stateMemoryIndex
-        self.worldModel = worldModel
-        self.aaePlanningAdvisor = OracleAAEPlanningAdvisor.loadFromEnvironment()
-
-        let projectMemoryCoordinator = LoopProjectMemoryCoordinator(memoryStore: memoryStore)
-        let learningCoordinator = LearningCoordinator(
-            memoryStore: memoryStore,
-            projectMemoryCoordinator: projectMemoryCoordinator
-        )
-        self.learningCoordinator = learningCoordinator
-        self.stateCoordinator = StateCoordinator(
-            observationProvider: observationProvider,
-            stateAbstraction: stateAbstraction,
-            repositoryIndexer: repositoryIndexer,
-            automationHost: automationHost,
-            browserPageStateBuilder: browserPageStateBuilder
-        )
-        self.decisionCoordinator = DecisionCoordinator(
-            planner: planner,
-            graphStore: graphStore,
-            memoryStore: memoryStore,
-            stateMemoryIndex: stateMemoryIndex
-        )
-        self.executionCoordinator = ExecutionCoordinator(
-            executionDriver: executionDriver,
-            skillRegistry: skillRegistry,
-            policyEngine: policyEngine,
-            memoryStore: memoryStore
-        )
-        self.recoveryCoordinator = RecoveryCoordinator(
-            observationProvider: observationProvider,
-            stateAbstraction: stateAbstraction,
-            recoveryEngine: recoveryEngine,
-            executionCoordinator: self.executionCoordinator,
-            learningCoordinator: learningCoordinator,
-            repositoryIndexer: repositoryIndexer,
-            automationHost: automationHost,
-            browserPageStateBuilder: browserPageStateBuilder
-        )
-        self.experimentCoordinator = LoopExperimentCoordinator(
-            experimentManager: experimentManager,
-            executionCoordinator: self.executionCoordinator,
-            observationProvider: observationProvider,
-            stateAbstraction: stateAbstraction,
-            recoveryEngine: recoveryEngine,
-            memoryStore: memoryStore,
-            repositoryIndexer: repositoryIndexer,
-            projectMemoryCoordinator: projectMemoryCoordinator
-        )
-    }
-
-    /// LEGACY init — does not use RuntimeOrchestrator as execution spine.
-    /// Prefer init(orchestrator:...) for new work.
-    @available(*, deprecated, message: "Use init(orchestrator:...) to route through IntentAPI spine.")
-    public init(
-        observationProvider: any ObservationProvider,
-        executionDriver: any AgentExecutionDriver,
-        stateAbstraction: StateAbstraction = StateAbstraction(),
-        planner: MainPlanner = MainPlanner(),
-        graphStore: GraphStore = GraphStore(),
-        policyEngine: PolicyEngine = PolicyEngine(),
-        recoveryEngine: RecoveryEngine = RecoveryEngine(),
-        memoryStore: UnifiedMemoryStore = UnifiedMemoryStore(),
-        skillRegistry: SkillRegistry = .live(),
-        repositoryIndexer: RepositoryIndexer = RepositoryIndexer(),
-        experimentManager: ExperimentManager = ExperimentManager(),
-        automationHost: AutomationHost = .live(),
-        browserPageStateBuilder: BrowserPageStateBuilder = BrowserPageStateBuilder(),
-        stateMemoryIndex: StateMemoryIndex? = nil,
-        worldModel: WorldStateModel = WorldStateModel()
-    ) {
-        self.orchestrator = nil
         self.planner = planner
         self.graphStore = graphStore
         self.stateMemoryIndex = stateMemoryIndex

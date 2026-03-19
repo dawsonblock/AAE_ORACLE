@@ -1,134 +1,131 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException
+import json
 import time
+from collections import deque
+from pathlib import Path
 
-from aae.oracle_bridge.contracts import ContractVersion, OraclePlanRequest
-from aae.oracle_bridge.result_contracts import ExperimentResultRequest
+from fastapi import APIRouter, HTTPException
+
+from aae.analysis.replay import ReplayEngine
+from aae.analysis.structured_logger import StructuredEventLogger, generate_trace_id
+from aae.oracle_bridge.contracts import ContractVersion, ExperimentResultRequest as CanonicalExperimentResultRequest, PlanRequest
+from aae.oracle_bridge.oracle_adapters import (
+    OraclePlanRequest,
+    convert_oracle_request,
+    convert_oracle_result_request,
+)
+from aae.oracle_bridge.result_contracts import ExperimentResultResponse, OracleExperimentResultRequest
 from aae.oracle_bridge.result_service import ResultService, get_telemetry
 from aae.oracle_bridge.service import OraclePlanningBridge
-from aae.analysis.structured_logger import StructuredEventLogger, generate_trace_id
-from aae.analysis.replay import ReplayEngine
 from aae.storage.experiment_store import ExperimentStore
+from aae.storage.ranking_store import RankingStore
 
-router = APIRouter(prefix='/api/oracle', tags=['oracle'])
+router = APIRouter(prefix="/api/oracle", tags=["oracle"])
 BRIDGE = OraclePlanningBridge()
 RESULT_SERVICE = ResultService()
-
-# Persistent stores (file-backed SQLite for data that survives restarts)
 _experiment_store = ExperimentStore(db="experiments.db")
+_ranking_store = RankingStore(db="rankings.db")
 _event_logger = StructuredEventLogger()
-_replay_engine = ReplayEngine(
-    experiment_store=_experiment_store,
-    event_log_path=_event_logger.path,
-)
+_replay_engine = ReplayEngine(experiment_store=_experiment_store, event_log_path=_event_logger.path)
 
-# In-memory fusion observability store (Phase 6)
-class FusionStatsStore:
-    """In-memory store for Oracle-AAE fusion observability metrics."""
-    
-    def __init__(self):
-        self._goals: dict = {}  # goal_id -> goal info
-        self._candidates: list = []  # list of candidate rankings
-        self._accepted: int = 0
-        self._rejected: int = 0
-        self._test_passed: int = 0
-        self._test_total: int = 0
-        self._score_lifts: list = []
-        self._fallback_count: int = 0
-        self._oracle_native_count: int = 0
-        self._aae_advised_count: int = 0
-        self._hybrid_count: int = 0
-    
-    def record_goal(self, goal_id: str, objective: str) -> None:
-        """Record an incoming goal from Oracle."""
-        self._goals[goal_id] = {
-            'goal_id': goal_id,
-            'objective': objective,
-            'status': 'active',
-            'created_at': datetime.now(timezone.utc).isoformat(),
-            'active_candidates': 0,
-        }
-    
-    def record_candidate_ranking(
-        self, 
-        goal_id: str, 
-        candidate_id: str, 
-        predicted_score: float,
-        source: str
-    ) -> None:
-        """Record a candidate ranking."""
-        rank = len([c for c in self._candidates if c['goal_id'] == goal_id]) + 1
-        self._candidates.append({
-            'goal_id': goal_id,
-            'candidate_id': candidate_id,
-            'predicted_score': predicted_score,
-            'source': source,
-            'rank': rank,
-        })
-        # Update source counts
-        if source == 'oracle_native':
-            self._oracle_native_count += 1
-        elif source == 'aae_advised':
-            self._aae_advised_count += 1
-        elif source == 'hybrid':
-            self._hybrid_count += 1
-        # Update goal active candidates
-        if goal_id in self._goals:
-            self._goals[goal_id]['active_candidates'] += 1
-    
-    def record_acceptance(self, accepted: bool) -> None:
-        """Record candidate acceptance/rejection."""
-        if accepted:
-            self._accepted += 1
-        else:
-            self._rejected += 1
-    
-    def record_test_result(self, passed: bool, score_lift: float = 0.0) -> None:
-        """Record test execution result."""
-        self._test_total += 1
-        if passed:
-            self._test_passed += 1
-        if score_lift != 0.0:
-            self._score_lifts.append(score_lift)
-    
-    def record_fallback(self) -> None:
-        """Record fallback to Oracle-native plan."""
-        self._fallback_count += 1
-    
-    def get_stats(self) -> dict:
-        """Get current fusion statistics."""
-        active_goals = [g for g in self._goals.values() if g['status'] == 'active']
-        pending_goals = [g for g in self._goals.values() if g['status'] == 'pending']
-        
-        total = self._accepted + self._rejected
-        avg_score_lift = sum(self._score_lifts) / len(self._score_lifts) if self._score_lifts else 0.0
-        fallback_freq = self._fallback_count / (total or 1)
-        
-        return {
-            'incoming_goals': {
-                'count': len(self._goals),
-                'active': len(active_goals),
-                'pending': len(pending_goals),
-            },
-            'candidate_rankings': self._candidates[-50:],  # Last 50 candidates
-            'acceptance_stats': {
-                'accepted': self._accepted,
-                'rejected': self._rejected,
-                'total': total,
-            },
-            'test_pass_rate': self._test_passed / (self._test_total or 1),
-            'average_score_lift': avg_score_lift,
-            'fallback_frequency': fallback_freq,
-            'source_breakdown': {
-                'oracle_native': self._oracle_native_count,
-                'aae_advised': self._aae_advised_count,
-                'hybrid': self._hybrid_count,
-            },
-        }
 
-FUSION_STATS = FusionStatsStore()
+def _read_recent_events(limit: int = 200) -> list[dict]:
+    path = Path(_event_logger.path)
+    if not path.exists():
+        return []
+    events: deque[dict] = deque(maxlen=limit)
+    with path.open(encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    return list(events)
+
+
+def _repair_usefulness(score: float) -> str:
+    if score >= 0.8:
+        return "high"
+    if score >= 0.5:
+        return "medium"
+    return "low"
+
+
+def _failure_mode(request: OracleExperimentResultRequest) -> str | None:
+    if request.execution_status == "success":
+        return None
+    if request.safety_violations:
+        return "safety_violation"
+    if not request.build_results.success:
+        return "build_error"
+    if not request.test_results.is_success():
+        return "test_failure"
+    if request.execution_status == "partial":
+        return "runtime_error"
+    return "unknown"
+
+
+def _fusion_stats_snapshot() -> dict:
+    recent_events = _read_recent_events()
+    recent_experiments = _experiment_store.list_recent(limit=50)
+    goal_ids = {
+        *(event.get("goal_id") for event in recent_events if event.get("goal_id")),
+        *(event.get("goal") for event in recent_experiments if event.get("goal")),
+    }
+    result_events = [
+        event for event in recent_events if event.get("stage") in {"result", "result_ingest"}
+    ]
+    accepted = sum(1 for item in recent_experiments if item.get("accepted"))
+    total = len(recent_experiments)
+    rejected = total - accepted
+    test_rates = [
+        float((event.get("metrics") or {}).get("test_pass_rate", 0.0))
+        for event in result_events
+        if isinstance(event.get("metrics"), dict)
+    ]
+    score_lifts = [float(event.get("score", 0.0)) for event in result_events]
+    fallback_count = sum(1 for event in recent_events if event.get("stage") in {"fallback", "rejection"})
+    source_breakdown = {"oracle_native": 0, "aae_advised": 0, "hybrid": 0}
+    for event in recent_events:
+        if event.get("stage") != "candidate":
+            continue
+        source = event.get("source", "aae_advised")
+        source_breakdown[source] = source_breakdown.get(source, 0) + 1
+
+    candidate_rankings = []
+    for experiment in recent_experiments:
+        candidate_rankings.append(
+            {
+                "goal_id": experiment["goal"],
+                "candidate_id": experiment["candidate_id"],
+                "predicted_score": experiment["score"],
+                "accepted": experiment["accepted"],
+                "created_at": experiment["created_at"],
+            }
+        )
+
+    return {
+        "incoming_goals": {
+            "count": len(goal_ids),
+            "active": len(goal_ids),
+            "pending": 0,
+        },
+        "candidate_rankings": candidate_rankings,
+        "acceptance_stats": {
+            "accepted": accepted,
+            "rejected": rejected,
+            "total": total,
+        },
+        "test_pass_rate": sum(test_rates) / len(test_rates) if test_rates else 0.0,
+        "average_score_lift": sum(score_lifts) / len(score_lifts) if score_lifts else 0.0,
+        "fallback_frequency": fallback_count / (total or 1),
+        "source_breakdown": source_breakdown,
+        "ranking_snapshot": _ranking_store.get_all_scores(),
+    }
 
 
 @router.get('/health')
@@ -147,36 +144,34 @@ async def plan(request: OraclePlanRequest):
     if request.trace_id is None:
         # Propagate generated trace_id back onto the request for downstream logging/observability
         request.trace_id = trace_id
-
-    # Record goal for observability
-    FUSION_STATS.record_goal(request.goal_id, request.objective)
+    canonical_request: PlanRequest = convert_oracle_request(request)
     
     start = time.perf_counter()
     result = BRIDGE.plan(request)
     duration_ms = (time.perf_counter() - start) * 1000
     
-    # Record candidates for observability
     for candidate in result.candidates:
-        FUSION_STATS.record_candidate_ranking(
-            goal_id=request.goal_id,
-            candidate_id=candidate.candidate_id,
-            predicted_score=candidate.predicted_score,
-            source='aae_advised'  # All AAE-provided candidates
-        )
-        _event_logger.log_candidate(
-            goal_id=request.goal_id,
-            trace_id=trace_id,
-            candidate_id=candidate.candidate_id,
-            kind=candidate.kind,
-            confidence=candidate.confidence,
+        _event_logger.log(
+            {
+                "stage": "candidate",
+                "goal_id": request.goal_id,
+                "trace_id": trace_id,
+                "candidate_id": candidate.candidate_id,
+                "kind": candidate.kind,
+                "confidence": candidate.confidence,
+                "source": "aae_advised",
+            }
         )
 
-    # Log plan event
-    _event_logger.log_plan(
-        goal_id=request.goal_id,
-        trace_id=trace_id,
-        candidate_count=len(result.candidates),
-        latency_ms=duration_ms,
+    _event_logger.log(
+        {
+            "stage": "plan",
+            "goal_id": request.goal_id,
+            "trace_id": trace_id,
+            "candidate_count": len(result.candidates),
+            "latency_ms": round(duration_ms, 2),
+            "canonical_request": canonical_request.model_dump(mode="json"),
+        }
     )
 
     response = result.model_dump()
@@ -186,38 +181,39 @@ async def plan(request: OraclePlanRequest):
 
 @router.post('/experiment_result')
 async def receive_experiment_result(
-    request: ExperimentResultRequest
+    request: OracleExperimentResultRequest
 ) -> dict:
     """Receive experiment execution results and return scoring feedback."""
-    # Ensure a trace_id is always present and consistent
     trace_id = request.trace_id or generate_trace_id()
     if request.trace_id is None:
         request.trace_id = trace_id
 
-    result = RESULT_SERVICE.process_experiment_result(request)
-    
-    # Persist to experiment store
-    _experiment_store.log(
-        goal=request.goal_id,
+    canonical_result: CanonicalExperimentResultRequest = convert_oracle_result_request(request)
+    ingested = RESULT_SERVICE.ingest(canonical_result.model_dump(mode="json"))
+
+    _event_logger.log_result(
+        goal_id=request.goal_id,
+        trace_id=trace_id,
         candidate_id=request.candidate_id,
         result=request.execution_status,
-        score=result.score,
-        failure_mode=result.failure_mode,
-        repair_usefulness=result.repair_usefulness,
-        trace_id=trace_id,
+        score=ingested["score"],
+        latency_ms=request.elapsed_time_seconds * 1000.0,
     )
 
-    # Record test result for observability
-    test_passed = request.test_results.is_success()
-    FUSION_STATS.record_test_result(test_passed)
-    
-    return result.model_dump()
+    response = ExperimentResultResponse(
+        score=ingested["score"],
+        failure_mode=_failure_mode(request),
+        repair_usefulness=_repair_usefulness(ingested["score"]),
+        feedback_summary=f"Processed {request.candidate_id} with score {ingested['score']:.2f}",
+        updated_candidate_ranking=ingested["updated_candidate_ranking"],
+    )
+    return response.model_dump()
 
 
 @router.get('/fusion-stats')
 async def get_fusion_stats():
     """Get Oracle-AAE fusion observability statistics (Phase 6)."""
-    return FUSION_STATS.get_stats()
+    return _fusion_stats_snapshot()
 
 
 @router.get('/stats')
@@ -237,7 +233,7 @@ async def replay_goal(goal_id: str):
 @router.get('/experiments/trace/{trace_id}')
 async def replay_trace(trace_id: str):
     """Replay all events for a trace ID."""
-    events = _replay_engine.get_trace_events(trace_id)
+    events = _replay_engine.get_history(trace_id)
     return {"trace_id": trace_id, "events": events}
 
 
@@ -251,16 +247,20 @@ async def recent_experiments(limit: int = 50):
 @router.post('/record-acceptance')
 async def record_acceptance(payload: dict):
     """Record candidate acceptance/rejection for observability."""
-    accepted = payload.get('accepted', False)
-    source = payload.get('source', 'unknown')
-    FUSION_STATS.record_acceptance(accepted)
-    if not accepted:
-        FUSION_STATS.record_fallback()
-    return {'status': 'recorded'}
+    _event_logger.log(
+        {
+            "stage": "acceptance",
+            "accepted": bool(payload.get("accepted", False)),
+            "source": payload.get("source", "unknown"),
+            "trace_id": payload.get("trace_id"),
+            "goal_id": payload.get("goal_id"),
+        }
+    )
+    return {"status": "recorded"}
 
 
 @router.post('/record-fallback')
 async def record_fallback():
     """Record fallback to Oracle-native plan."""
-    FUSION_STATS.record_fallback()
-    return {'status': 'recorded'}
+    _event_logger.log({"stage": "fallback"})
+    return {"status": "recorded"}

@@ -60,6 +60,48 @@ private func extractBool(_ params: [String: Any], _ key: String) -> Bool? {
 /// if the Swift concurrency story for UI automation matures.
 @MainActor
 public enum Actions {
+    private static func illegalExecutionPath(toolName: String?) -> ToolResult {
+        ToolResult(
+            success: false,
+            error: "Illegal execution path: \(toolName ?? "action") must route through RuntimeOrchestrator or an injected executor"
+        )
+    }
+
+    private static func executeWithAuthority(
+        intent: ActionIntent,
+        runtime: RuntimeOrchestrator?,
+        executor: VerifiedActionExecutor?,
+        surface: RuntimeSurface,
+        approvalRequestID: String?,
+        taskID: String?,
+        toolName: String?,
+        action: () -> ToolResult
+    ) -> ToolResult {
+        if let runtime {
+            return runtime.performAction(
+                surface: surface,
+                taskID: taskID,
+                toolName: toolName,
+                approvalRequestID: approvalRequestID,
+                intent: intent
+            ) {
+                action()
+            }
+        }
+
+        guard let executor else {
+            return illegalExecutionPath(toolName: toolName)
+        }
+
+        return executor.run(
+            taskID: taskID,
+            toolName: toolName,
+            intent: intent,
+            surface: surface
+        ) {
+            action()
+        }
+    }
 
     // MARK: - oracle_click
 
@@ -93,29 +135,15 @@ public enum Actions {
             postconditions: inferredClickPostconditions(query: query, role: role, domId: domId)
         )
 
-        if let runtime {
-            return runtime.performAction(
-                surface: surface,
-                taskID: taskID,
-                toolName: toolName,
-                approvalRequestID: approvalRequestID,
-                intent: intent
-            ) {
-                performClick(
-                    query: query,
-                    role: role,
-                    domId: domId,
-                    appName: appName,
-                    x: x,
-                    y: y,
-                    button: button,
-                    count: count
-                )
-            }
-        }
-
-        let actionExecutor = executor ?? VerifiedActionExecutor()
-        return actionExecutor.run(taskID: taskID, toolName: toolName, intent: intent, surface: surface) {
+        return executeWithAuthority(
+            intent: intent,
+            runtime: runtime,
+            executor: executor,
+            surface: surface,
+            approvalRequestID: approvalRequestID,
+            taskID: taskID,
+            toolName: toolName
+        ) {
             performClick(
                 query: query,
                 role: role,
@@ -350,26 +378,15 @@ public enum Actions {
             postconditions: inferredTypePostconditions(text: text, into: into, domId: domId)
         )
 
-        if let runtime {
-            return runtime.performAction(
-                surface: surface,
-                taskID: taskID,
-                toolName: toolName,
-                approvalRequestID: approvalRequestID,
-                intent: intent
-            ) {
-                performTypeText(
-                    text: text,
-                    into: into,
-                    domId: domId,
-                    appName: appName,
-                    clear: clear
-                )
-            }
-        }
-
-        let actionExecutor = executor ?? VerifiedActionExecutor()
-        return actionExecutor.run(taskID: taskID, toolName: toolName, intent: intent, surface: surface) {
+        return executeWithAuthority(
+            intent: intent,
+            runtime: runtime,
+            executor: executor,
+            surface: surface,
+            approvalRequestID: approvalRequestID,
+            taskID: taskID,
+            toolName: toolName
+        ) {
             performTypeText(
                 text: text,
                 into: into,
@@ -566,24 +583,15 @@ public enum Actions {
             postconditions: inferredPressPostconditions(appName: appName)
         )
 
-        if let runtime {
-            return runtime.performAction(
-                surface: surface,
-                taskID: taskID,
-                toolName: toolName,
-                approvalRequestID: approvalRequestID,
-                intent: intent
-            ) {
-                performPressKey(
-                    key: key,
-                    modifiers: modifiers,
-                    appName: appName
-                )
-            }
-        }
-
-        let actionExecutor = executor ?? VerifiedActionExecutor()
-        return actionExecutor.run(taskID: taskID, toolName: toolName, intent: intent, surface: surface) {
+        return executeWithAuthority(
+            intent: intent,
+            runtime: runtime,
+            executor: executor,
+            surface: surface,
+            approvalRequestID: approvalRequestID,
+            taskID: taskID,
+            toolName: toolName
+        ) {
             performPressKey(
                 key: key,
                 modifiers: modifiers,
@@ -642,20 +650,15 @@ public enum Actions {
             postconditions: postconditions
         )
 
-        if let runtime {
-            return runtime.performAction(
-                surface: surface,
-                taskID: taskID,
-                toolName: toolName,
-                approvalRequestID: approvalRequestID,
-                intent: intent
-            ) {
-                FocusManager.focus(appName: appName, windowTitle: windowTitle)
-            }
-        }
-
-        let actionExecutor = executor ?? VerifiedActionExecutor()
-        return actionExecutor.run(taskID: taskID, toolName: toolName, intent: intent, surface: surface) {
+        return executeWithAuthority(
+            intent: intent,
+            runtime: runtime,
+            executor: executor,
+            surface: surface,
+            approvalRequestID: approvalRequestID,
+            taskID: taskID,
+            toolName: toolName
+        ) {
             FocusManager.focus(appName: appName, windowTitle: windowTitle)
         }
     }
@@ -666,6 +669,7 @@ public enum Actions {
     public static func hotkey(
         keys: [String],
         appName: String?,
+        executor: VerifiedActionExecutor? = nil,
         runtime: RuntimeOrchestrator? = nil,
         surface: RuntimeSurface = .mcp,
         approvalRequestID: String? = nil,
@@ -685,22 +689,17 @@ public enum Actions {
             postconditions: inferredPressPostconditions(appName: appName)
         )
 
-        if let runtime {
-            return runtime.performAction(
-                surface: surface,
-                taskID: taskID,
-                toolName: toolName,
-                approvalRequestID: approvalRequestID,
-                intent: intent
-            ) {
-                performHotkey(keys: keys, appName: appName)
-            }
-        }
-
-        return VerifiedActionExecutor().run(taskID: taskID, toolName: toolName, intent: intent, surface: surface) {
+        return executeWithAuthority(
+            intent: intent,
+            runtime: runtime,
+            executor: executor,
+            surface: surface,
+            approvalRequestID: approvalRequestID,
+            taskID: taskID,
+            toolName: toolName
+        ) {
             performHotkey(keys: keys, appName: appName)
         }
-
     }
 
     private static func performHotkey(
@@ -741,6 +740,7 @@ public enum Actions {
         appName: String?,
         x: Double?,
         y: Double?,
+        executor: VerifiedActionExecutor? = nil,
         runtime: RuntimeOrchestrator? = nil,
         surface: RuntimeSurface = .mcp,
         approvalRequestID: String? = nil,
@@ -756,25 +756,15 @@ public enum Actions {
             y: y
         )
 
-        if let runtime {
-            return runtime.performAction(
-                surface: surface,
-                taskID: taskID,
-                toolName: toolName,
-                approvalRequestID: approvalRequestID,
-                intent: intent
-            ) {
-                performScroll(
-                    direction: direction,
-                    amount: amount,
-                    appName: appName,
-                    x: x,
-                    y: y
-                )
-            }
-        }
-
-        return VerifiedActionExecutor().run(taskID: taskID, toolName: toolName, intent: intent, surface: surface) {
+        return executeWithAuthority(
+            intent: intent,
+            runtime: runtime,
+            executor: executor,
+            surface: surface,
+            approvalRequestID: approvalRequestID,
+            taskID: taskID,
+            toolName: toolName
+        ) {
             performScroll(
                 direction: direction,
                 amount: amount,
@@ -894,6 +884,7 @@ public enum Actions {
         windowTitle: String?,
         x: Double?, y: Double?,
         width: Double?, height: Double?,
+        executor: VerifiedActionExecutor? = nil,
         runtime: RuntimeOrchestrator? = nil,
         surface: RuntimeSurface = .mcp,
         approvalRequestID: String? = nil,
@@ -921,35 +912,25 @@ public enum Actions {
             y: y
         )
 
-        if let runtime {
-            return runtime.performAction(
-                surface: surface,
-                taskID: taskID,
-                toolName: toolName,
-                approvalRequestID: approvalRequestID,
-                intent: intent
-            ) {
-                performWindowAction(
-                    action: action,
-                    appName: appName,
-                    windowTitle: windowTitle,
-                    x: x,
-                    y: y,
-                    width: width,
-                    height: height
-                )
-            }
+        return executeWithAuthority(
+            intent: intent,
+            runtime: runtime,
+            executor: executor,
+            surface: surface,
+            approvalRequestID: approvalRequestID,
+            taskID: taskID,
+            toolName: toolName
+        ) {
+            performWindowAction(
+                action: action,
+                appName: appName,
+                windowTitle: windowTitle,
+                x: x,
+                y: y,
+                width: width,
+                height: height
+            )
         }
-
-        return performWindowAction(
-            action: action,
-            appName: appName,
-            windowTitle: windowTitle,
-            x: x,
-            y: y,
-            width: width,
-            height: height
-        )
     }
 
     private static func performWindowAction(

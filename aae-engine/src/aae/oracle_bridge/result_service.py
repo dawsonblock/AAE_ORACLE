@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import asdict, dataclass
 from typing import Any, Dict, Optional
 
 from aae.analysis.experiment_evaluator import ExperimentEvaluator
 from aae.analysis.replay import ReplayEngine
 from aae.observability.event_logger import EventLogger
+from aae.oracle_bridge.contracts import ExperimentResultRequest
 from aae.storage.experiment_store import ExperimentStore
 from aae.storage.ranking_store import RankingStore
 
@@ -40,18 +40,6 @@ def get_telemetry() -> RejectionTelemetry:
     return _telemetry
 
 
-@dataclass
-class ProcessExperimentResult:
-    score: float
-    failure_mode: Optional[str]
-    repair_usefulness: str
-    feedback_summary: str
-    updated_candidate_ranking: list[dict[str, Any]]
-
-    def model_dump(self) -> Dict[str, Any]:
-        return asdict(self)
-
-
 class ResultService:
     def __init__(self) -> None:
         self.evaluator = ExperimentEvaluator()
@@ -61,89 +49,90 @@ class ResultService:
         self.event_logger = EventLogger()
 
     def ingest(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        trace_id = payload.get("trace_id")
-        candidate_id = payload.get("candidate_id")
-        goal = payload.get("goal")
-        candidate_type = payload.get("candidate_type")
-        target_files = payload.get("target_files", [])
-        execution_result = payload.get("execution_result")
-        accepted = bool(payload.get("accepted", False))
-
-        if not trace_id:
-            raise ValueError("missing trace_id")
-        if not candidate_id:
-            raise ValueError("missing candidate_id")
-        if not execution_result:
-            raise ValueError("missing execution_result")
-
-        evaluation = self.evaluator.evaluate(goal, payload)
+        request = ExperimentResultRequest.model_validate(payload)
+        evaluation_input = {
+            "status": request.execution_result,
+            "execution_result": request.execution_result,
+            "accepted": request.accepted,
+            **request.metrics,
+        }
+        evaluation = self.evaluator.evaluate(request.goal, evaluation_input)
         score = evaluation["score"]
+        combined_metrics = {
+            **request.metrics,
+            **evaluation["metrics"],
+        }
+
+        before_rank = self._rank_position(request.goal, request.candidate_id)
 
         self.experiment_store.log(
-            trace_id=trace_id,
-            goal=goal,
-            candidate_id=candidate_id,
-            candidate_type=candidate_type,
-            target_files=target_files,
-            execution_result=execution_result,
+            trace_id=request.trace_id,
+            goal=request.goal,
+            candidate_id=request.candidate_id,
+            candidate_type=request.candidate_type.value,
+            target_files=request.target_files,
+            execution_result=request.execution_result,
             score=score,
-            accepted=accepted,
+            accepted=request.accepted,
         )
 
-        delta = score if accepted else -0.5
-        self.ranking_store.update(candidate_id, delta, accepted)
+        delta = score if request.accepted else -max(0.1, 1.0 - score)
+        self.ranking_store.update(request.candidate_id, request.goal, delta)
+        after_rank = self._rank_position(request.goal, request.candidate_id)
+        rank_change = self._rank_change(before_rank, after_rank)
 
-        if accepted:
+        if request.accepted:
             _telemetry.record_acceptance()
         else:
             _telemetry.record_rejection("not_accepted")
 
         self.event_logger.log(
             {
+                "event": "result_ingested",
                 "stage": "result_ingest",
-                "trace_id": trace_id,
-                "goal": goal,
-                "candidate_id": candidate_id,
-                "accepted": accepted,
+                "trace_id": request.trace_id,
+                "goal": request.goal,
+                "candidate_id": request.candidate_id,
+                "accepted": request.accepted,
                 "score": score,
+                "metrics": combined_metrics,
             }
         )
 
         return {
-            "trace_id": trace_id,
-            "candidate_id": candidate_id,
+            "trace_id": request.trace_id,
+            "goal": request.goal,
+            "candidate_id": request.candidate_id,
             "score": score,
-            "metrics": evaluation["metrics"],
+            "accepted": request.accepted,
+            "execution_result": request.execution_result,
+            "metrics": combined_metrics,
+            "updated_candidate_ranking": [
+                {
+                    "candidate_id": request.candidate_id,
+                    "new_score": self.ranking_store.get_score(request.candidate_id, request.goal),
+                    "rank_change": rank_change,
+                }
+            ],
         }
 
     def replay(self, trace_id: str):
         return self.replay_engine.get_history(trace_id)
 
-    def process_experiment_result(self, request: Any) -> ProcessExperimentResult:
-        execution_result = getattr(request, "execution_status", None) or getattr(
-            request,
-            "execution_result",
-            "failure",
-        )
-        payload = {
-            "trace_id": getattr(request, "trace_id", "legacy-trace"),
-            "goal": getattr(request, "goal_id", None) or getattr(request, "goal", "repair"),
-            "candidate_id": getattr(request, "candidate_id", ""),
-            "candidate_type": getattr(request, "candidate_type", "patch"),
-            "target_files": getattr(request, "touched_files", None)
-            or getattr(request, "target_files", []),
-            "accepted": execution_result == "success",
-            "execution_result": execution_result,
-            "metrics": {},
-        }
-        ingested = self.ingest(payload)
-        return ProcessExperimentResult(
-            score=ingested["score"],
-            failure_mode=None if execution_result == "success" else "execution_failure",
-            repair_usefulness="high" if ingested["score"] >= 0.8 else "medium",
-            feedback_summary=f"Processed {payload['candidate_id']} with score {ingested['score']:.2f}",
-            updated_candidate_ranking=[{"candidate_id": payload["candidate_id"], "new_score": ingested["score"]}],
-        )
+    def _rank_position(self, goal: str, candidate_id: str) -> Optional[int]:
+        rankings = self.ranking_store.get_rankings(goal)
+        for index, record in enumerate(rankings, start=1):
+            if record["candidate_id"] == candidate_id:
+                return index
+        return None
+
+    @staticmethod
+    def _rank_change(before_rank: Optional[int], after_rank: Optional[int]) -> int:
+        if after_rank is None:
+            return 0
+        if before_rank is None:
+            return 1
+        return before_rank - after_rank
 
 
 ExperimentResultService = ResultService

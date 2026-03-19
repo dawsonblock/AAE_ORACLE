@@ -29,6 +29,7 @@ class RepairLoop:
         trace_id: Optional[str] = None,
         goal_id: str = "repair",
     ) -> Dict[str, Any]:
+        effective_trace_id = trace_id or f"{goal_id}:{file_path}"
         if isinstance(project_path, dict):
             sandbox_result = project_path
             patch_candidate = source_code if isinstance(source_code, dict) else {}
@@ -37,7 +38,7 @@ class RepairLoop:
             )
             return {
                 "status": "completed",
-                "trace_id": trace_id,
+                "trace_id": effective_trace_id,
                 "goal_id": goal_id,
                 "failures": failures,
                 "best_score": 0.0,
@@ -48,14 +49,14 @@ class RepairLoop:
         self.event_logger.log(
             {
                 "stage": "repair_start",
-                "trace_id": trace_id,
+                "trace_id": effective_trace_id,
                 "goal_id": goal_id,
                 "file_path": file_path,
             }
         )
         baseline = self.harness.run(project_path)
         if baseline["status"] == "success":
-            return {"status": "no_fix_needed", "trace_id": trace_id, "goal_id": goal_id}
+            return {"status": "no_fix_needed", "trace_id": effective_trace_id, "goal_id": goal_id}
 
         failures = self.localizer.extract(baseline["output"] + "\n" + baseline["errors"])
         candidates = self.planner.generate(
@@ -68,14 +69,29 @@ class RepairLoop:
         best_candidate = None
 
         for candidate in candidates:
-            patch_meta = self.applier.apply(file_path, candidate["diff"])
-            result = self.harness.run(project_path)
-            evaluation = self.evaluator.evaluate(goal_id, result)
-            score = evaluation["score"]
+            candidate_id = candidate.get("id")
+            if not candidate_id:
+                raise ValueError("planner.generate() produced a candidate without a non-empty 'id'.")
+            if not candidate.get("diff"):
+                raise ValueError(f"planner.generate() produced candidate {candidate_id!r} without a non-empty 'diff'.")
+            target_files = candidate.get("target_files")
+            if not isinstance(target_files, list):
+                raise TypeError(
+                    f"planner.generate() produced candidate {candidate_id!r} with non-list 'target_files': "
+                    f"{type(target_files).__name__}"
+                )
+
+            try:
+                self.applier.apply(file_path, candidate["diff"])
+                result = self.harness.run(project_path)
+                evaluation = self.evaluator.evaluate(goal_id, result)
+                score = evaluation["score"]
+            finally:
+                self.applier.rollback(file_path)
 
             self.result_service.ingest(
                 {
-                    "trace_id": trace_id,
+                    "trace_id": effective_trace_id,
                     "goal": goal_id,
                     "candidate_id": candidate["id"],
                     "candidate_type": candidate["type"],
@@ -85,8 +101,6 @@ class RepairLoop:
                     "metrics": evaluation["metrics"],
                 }
             )
-
-            self.applier.rollback(file_path)
 
             if score > best_score:
                 best_score = score
@@ -98,7 +112,7 @@ class RepairLoop:
         self.event_logger.log(
             {
                 "stage": "repair_complete",
-                "trace_id": trace_id,
+                "trace_id": effective_trace_id,
                 "goal_id": goal_id,
                 "best_score": best_score,
                 "applied": best_candidate is not None,
@@ -106,7 +120,7 @@ class RepairLoop:
         )
         return {
             "status": "completed",
-            "trace_id": trace_id,
+            "trace_id": effective_trace_id,
             "goal_id": goal_id,
             "failures": failures,
             "best_score": best_score,

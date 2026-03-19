@@ -7,9 +7,9 @@
         bootstrap run-controller run-planner run-agents run-sandbox \
         run-dashboard build-docker up down clean format
 
-PYTHON  := python
-PIP     := pip
-PYTEST  := pytest
+PYTHON  ?= python3
+PIP     ?= pip3
+PYTEST  ?= pytest
 DOCKER  := docker
 COMPOSE := docker compose
 APP     := src/aae

@@ -51,9 +51,13 @@ class ExecutionRouter:
     ) -> ExecResult:
         """Route *action* → ExecRequest → ExecResult.
 
-        Unknown actions default to a dry-run command execution.
+        Unknown actions are rejected to preserve the sandbox-only execution spine.
         """
-        kind = _ROUTE_TABLE.get(action, "command")
+        kind = _ROUTE_TABLE.get(action)
+        if kind is None:
+            msg = f"Unknown execution action: {action}"
+            log.warning(msg)
+            return ExecResult(status="failed", error=msg)
         request = ExecRequest(
             kind=kind,
             payload=payload,

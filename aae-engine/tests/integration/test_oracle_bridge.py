@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from aae.dashboard_api.routers.oracle import router
 from aae.oracle_bridge import OraclePlanRequest, OraclePlanningBridge
-from aae.oracle_bridge.contracts import (
+from aae.oracle_bridge.oracle_adapters import (
     OracleCandidateCommand,
     OraclePlanResponse,
     CandidateKind,

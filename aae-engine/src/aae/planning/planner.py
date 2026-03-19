@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 
 from aae.analysis.coverage_runner import CoverageRunner
 from aae.code_analysis import CodeAnalyzer
+from aae.observability.event_logger import EventLogger
 from aae.planning.mutator import Mutator
 from aae.planning.ranker import CandidateRanker
 from aae.planning.templates import PatchTemplates
@@ -20,6 +21,7 @@ class Planner:
         self.coverage = CoverageRunner()
         self.ranking_store = RankingStore()
         self.ranker = CandidateRanker(self.ranking_store)
+        self.event_logger = EventLogger()
 
     def _candidate_id(self, code: str) -> str:
         return hashlib.sha256(code.encode("utf-8")).hexdigest()[:16]
@@ -70,11 +72,19 @@ class Planner:
                     "target_files": target_files or [],
                     "diff": variant,
                     "trace_id": trace_id,
-                    "coverage_gain": coverage_gain,
                 }
 
                 verdict = validate(candidate)
                 if verdict["valid"]:
+                    self.event_logger.log(
+                        {
+                            "event": "candidate_generated",
+                            "stage": "planner",
+                            "trace_id": trace_id,
+                            "candidate_id": candidate["id"],
+                            "target_files": candidate["target_files"],
+                        }
+                    )
                     candidates.append(candidate)
 
         return self.ranker.rank(candidates)[:3]

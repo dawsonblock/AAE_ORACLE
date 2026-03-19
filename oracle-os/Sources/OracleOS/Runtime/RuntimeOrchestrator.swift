@@ -61,7 +61,7 @@ public actor RuntimeOrchestrator: IntentAPI {
         self.planner = MainPlanner()
         self.preconditionsValidator = PreconditionsValidator()
         self.safetyValidator = SafetyValidator()
-        self.toolDispatcher = ToolDispatcher()
+        self.toolDispatcher = ToolDispatcher(context: context)
         self.postconditionsValidator = PostconditionsValidator()
         self.capabilityBinder = CapabilityBinder()
         self._legacyContext = context
@@ -81,7 +81,7 @@ public actor RuntimeOrchestrator: IntentAPI {
         self.planner = planner
         self.preconditionsValidator = PreconditionsValidator()
         self.safetyValidator = SafetyValidator()
-        self.toolDispatcher = ToolDispatcher()
+        self.toolDispatcher = ToolDispatcher(context: context)
         self.postconditionsValidator = PostconditionsValidator()
         self.capabilityBinder = CapabilityBinder()
         self._legacyContext = context
@@ -101,7 +101,7 @@ public actor RuntimeOrchestrator: IntentAPI {
         self.planner = MainPlanner()
         self.preconditionsValidator = PreconditionsValidator()
         self.safetyValidator = SafetyValidator()
-        self.toolDispatcher = ToolDispatcher()
+        self.toolDispatcher = ToolDispatcher(context: context)
         self.postconditionsValidator = PostconditionsValidator()
         self.capabilityBinder = CapabilityBinder()
         self._legacyContext = context
