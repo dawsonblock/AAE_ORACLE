@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -74,9 +75,20 @@ def scan_execution() -> list[str]:
 def scan_forbidden_modules() -> list[str]:
     issues: list[str] = []
     for path in iter_live_python_files():
-        text = path.read_text(encoding="utf-8", errors="ignore")
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8", errors="ignore"), filename=str(path))
+        except SyntaxError:
+            continue
+        imported: list[str] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    imported.append(alias.name)
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    imported.append(node.module)
         for module in FORBIDDEN_MODULES:
-            if module in text:
+            if any(name == module or name.startswith(module + ".") for name in imported):
                 issues.append(f"Forbidden module reference '{module}' in {path.relative_to(REPO_ROOT)}")
     return issues
 
