@@ -23,7 +23,6 @@ from aae.storage.ranking_store import RankingStore
 router = APIRouter(prefix="/api/oracle", tags=["oracle"])
 BRIDGE = OraclePlanningBridge()
 RESULT_SERVICE = ResultService()
-_SERVICE_APP = oracle_bridge_app
 _experiment_store = ExperimentStore(db="experiments.db")
 _ranking_store = RankingStore(db="rankings.db")
 _event_logger = StructuredEventLogger()
