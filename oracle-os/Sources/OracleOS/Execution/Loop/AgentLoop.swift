@@ -171,10 +171,13 @@ public final class AgentLoop {
         )
     }
 
-    public func execute(goal: Goal) {
+    @discardableResult
+    public func execute(goal: Goal) -> Task<LoopOutcome, Never> {
         Task { [weak self] in
-            guard let self else { return }
-            _ = await self.run(goal: goal)
+            guard let self else {
+                return LoopOutcome(reason: .unrecoverableFailure, finalWorldState: nil, steps: 0, recoveries: 0)
+            }
+            return await self.run(goal: goal)
         }
     }
 }
