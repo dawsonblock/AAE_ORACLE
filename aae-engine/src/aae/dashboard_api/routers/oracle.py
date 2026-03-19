@@ -4,20 +4,17 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 import time
 
-from aae.oracle_bridge import (
-    OraclePlanRequest,
-    OraclePlanningBridge,
-    ExperimentResultRequest,
-    process_experiment_result,
-    ContractVersion,
-)
-from aae.oracle_bridge.result_service import get_telemetry
+from aae.oracle_bridge.contracts import ContractVersion, OraclePlanRequest
+from aae.oracle_bridge.result_contracts import ExperimentResultRequest
+from aae.oracle_bridge.result_service import ResultService, get_telemetry
+from aae.oracle_bridge.service import OraclePlanningBridge
 from aae.analysis.structured_logger import StructuredEventLogger, generate_trace_id
 from aae.analysis.replay import ReplayEngine
 from aae.storage.experiment_store import ExperimentStore
 
 router = APIRouter(prefix='/api/oracle', tags=['oracle'])
 BRIDGE = OraclePlanningBridge()
+RESULT_SERVICE = ResultService()
 
 # Persistent stores (file-backed SQLite for data that survives restarts)
 _experiment_store = ExperimentStore(db="experiments.db")
@@ -197,7 +194,7 @@ async def receive_experiment_result(
     if request.trace_id is None:
         request.trace_id = trace_id
 
-    result = process_experiment_result(request)
+    result = RESULT_SERVICE.process_experiment_result(request)
     
     # Persist to experiment store
     _experiment_store.log(

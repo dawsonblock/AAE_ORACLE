@@ -1,45 +1,30 @@
-"""Deterministic candidate ranker.
-
-Combines real-time confidence with historical ranking priors to produce
-a stable, reproducible ordering of candidates.
-"""
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from aae.storage.ranking_store import RankingStore
+from typing import Any, Dict, List
 
 
 class CandidateRanker:
-    """Rank candidates using confidence and historical score priors."""
-
-    CONFIDENCE_WEIGHT = 0.7
-    PRIOR_WEIGHT = 0.3
-
-    def __init__(self, ranking_store: "RankingStore"):
+    def __init__(self, ranking_store) -> None:
         self.ranking_store = ranking_store
 
-    def rank(self, candidates: list, goal_id: str = "") -> list:
-        """Sort candidates by blended score (confidence × 0.7 + prior × 0.3).
+    def _candidate_value(self, candidate: Dict[str, Any] | Any, key: str, default: Any) -> Any:
+        if isinstance(candidate, dict):
+            return candidate.get(key, default)
+        return getattr(candidate, key, default)
 
-        Parameters
-        ----------
-        candidates : list
-            Candidate objects with `candidate_id` and `confidence` attributes.
-        goal_id : str
-            Goal context for prior score lookup.
+    def _score(self, candidate: Dict[str, Any] | Any, goal_id: str | None = None) -> float:
+        candidate_id = self._candidate_value(candidate, "id", None) or self._candidate_value(
+            candidate, "candidate_id", ""
+        )
+        if goal_id and hasattr(self.ranking_store, "get_score"):
+            prior = self.ranking_store.get_score(candidate_id, goal_id)
+        else:
+            record = self.ranking_store.get(candidate_id)
+            prior = record.get("score_total", 0.0)
+        confidence = self._candidate_value(candidate, "confidence", 0.0)
+        coverage_gain = self._candidate_value(candidate, "coverage_gain", 0.0)
+        risk = self._candidate_value(candidate, "risk", "")
+        safety_bonus = 0.1 if risk == "low" else 0.0
 
-        Returns
-        -------
-        list
-            Candidates sorted best-first.
-        """
+        return (confidence * 0.6) + (prior * 0.25) + (coverage_gain * 0.05) + safety_bonus
 
-        def _score(c) -> float:
-            cid = getattr(c, "candidate_id", getattr(c, "id", ""))
-            prior = self.ranking_store.get_score(cid, goal_id)
-            confidence = getattr(c, "confidence", 0.0)
-            return (confidence * self.CONFIDENCE_WEIGHT) + (prior * self.PRIOR_WEIGHT)
-
-        return sorted(candidates, key=_score, reverse=True)
+    def rank(self, candidates: List[Dict[str, Any]] | List[Any], goal_id: str | None = None) -> List[Any]:
+        return sorted(candidates, key=lambda candidate: self._score(candidate, goal_id=goal_id), reverse=True)

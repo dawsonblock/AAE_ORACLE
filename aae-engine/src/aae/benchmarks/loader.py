@@ -26,6 +26,7 @@ class BenchmarkLoader:
         for file_path in directory.glob("*.json"):
             with open(file_path) as f:
                 case_data = json.load(f)
+                case_data.setdefault("case_id", case_data.get("id", file_path.stem))
                 cases.append(case_data)
         return cases
 
