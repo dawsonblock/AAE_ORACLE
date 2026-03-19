@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections import deque
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -33,7 +34,7 @@ def _read_recent_events(limit: int = 200) -> list[dict]:
     path = Path(_event_logger.path)
     if not path.exists():
         return []
-    events: list[dict] = []
+    events: deque[dict] = deque(maxlen=limit)
     with path.open(encoding="utf-8") as handle:
         for line in handle:
             line = line.strip()
@@ -43,7 +44,7 @@ def _read_recent_events(limit: int = 200) -> list[dict]:
                 events.append(json.loads(line))
             except json.JSONDecodeError:
                 continue
-    return events[-limit:]
+    return list(events)
 
 
 def _repair_usefulness(score: float) -> str:
