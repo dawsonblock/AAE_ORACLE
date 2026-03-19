@@ -81,15 +81,13 @@ class RepairLoop:
                     f"{type(target_files).__name__}"
                 )
 
-            patch_meta = None
             try:
-                patch_meta = self.applier.apply(file_path, candidate["diff"])
+                self.applier.apply(file_path, candidate["diff"])
                 result = self.harness.run(project_path)
                 evaluation = self.evaluator.evaluate(goal_id, result)
                 score = evaluation["score"]
             finally:
-                if patch_meta is not None:
-                    self.applier.rollback(file_path)
+                self.applier.rollback(file_path)
 
             self.result_service.ingest(
                 {
