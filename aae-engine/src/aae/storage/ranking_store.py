@@ -26,10 +26,16 @@ class RankingStore:
             delta = float(args[1])
             accepted = delta >= 0
             storage_id = self._goal_scoped_id(candidate_id, goal_id)
-        else:
+        elif len(args) == 2:
             delta = float(args[0])
             accepted = bool(args[1])
             storage_id = candidate_id
+        else:
+            raise TypeError(
+                "update() requires either update(candidate_id, goal_id, delta) "
+                "or update(candidate_id, delta, accepted); "
+                f"got {1 + len(args)} positional argument(s)"
+            )
 
         current = self.get(storage_id)
         score_total = current["score_total"] + delta

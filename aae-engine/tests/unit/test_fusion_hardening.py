@@ -100,6 +100,29 @@ class TestRankingStore:
         store = RankingStore(db=":memory:")
         assert store.get_score("nonexistent", "g1") == 0.0
 
+    def test_update_legacy_delta_accepted(self):
+        store = RankingStore(db=":memory:")
+        score = store.update("c1", 0.4, True)
+        assert score == pytest.approx(0.4)
+        data = store.get("c1")
+        assert data["accept_count"] == 1
+        assert data["reject_count"] == 0
+
+    def test_update_too_few_args_raises(self):
+        store = RankingStore(db=":memory:")
+        with pytest.raises(TypeError, match="update\\(\\) requires either"):
+            store.update("c1", 0.5)
+
+    def test_update_no_args_raises(self):
+        store = RankingStore(db=":memory:")
+        with pytest.raises(TypeError, match="update\\(\\) requires either"):
+            store.update("c1")
+
+    def test_update_too_many_args_raises(self):
+        store = RankingStore(db=":memory:")
+        with pytest.raises(TypeError, match="update\\(\\) requires either"):
+            store.update("c1", "g1", 0.5, "extra")
+
 
 # ── ExperimentEvaluator ──
 
