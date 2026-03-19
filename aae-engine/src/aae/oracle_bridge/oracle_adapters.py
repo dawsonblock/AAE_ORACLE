@@ -6,7 +6,6 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from aae.oracle_bridge.contracts import Candidate, CandidateType, ContractVersion, ExperimentResultRequest, PlanRequest
-from aae.oracle_bridge.result_contracts import OracleExperimentResultRequest
 
 CANDIDATE_SCHEMA_VERSION = "aae.oracle_bridge.v1"
 
@@ -92,6 +91,75 @@ class OraclePlanResponse(BaseModel):
     summary: Dict[str, Any] = Field(default_factory=dict)
     warnings: List[str] = Field(default_factory=list)
     candidates: List[OracleCandidateCommand] = Field(default_factory=list)
+
+
+class ExecutionStatus(str, Enum):
+    SUCCESS = "success"
+    PARTIAL = "partial"
+    FAILURE = "failure"
+
+
+class OracleTestResultSummary(BaseModel):
+    passed: int = Field(default=0, ge=0)
+    failed: int = Field(default=0, ge=0)
+    skipped: int = Field(default=0, ge=0)
+    errors: int = Field(default=0, ge=0)
+    total_tests: int = Field(default=0, ge=0)
+
+    def is_success(self) -> bool:
+        return self.failed == 0 and self.errors == 0
+
+
+class OracleBuildResultSummary(BaseModel):
+    success: bool = Field(default=False)
+    error_count: int = Field(default=0, ge=0)
+    warning_count: int = Field(default=0, ge=0)
+    error_messages: List[str] = Field(default_factory=list)
+
+
+class OracleSafetyViolation(BaseModel):
+    violation_type: str
+    severity: str
+    description: str
+    file_path: Optional[str] = None
+    line_number: Optional[int] = None
+
+
+class OracleExperimentResultRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    goal_id: str
+    candidate_id: str
+    candidate_type: str = "patch"
+    command_executed: str
+    touched_files: List[str] = Field(default_factory=list)
+    test_results: OracleTestResultSummary
+    build_results: OracleBuildResultSummary
+    runtime_diagnostics: List[str] = Field(default_factory=list)
+    domain_event_summary: str = ""
+    safety_violations: List[OracleSafetyViolation] = Field(default_factory=list)
+    elapsed_time_seconds: float = Field(ge=0.0)
+    execution_status: str
+    trace_id: Optional[str] = None
+
+    def get_execution_status(self) -> ExecutionStatus:
+        return ExecutionStatus(self.execution_status)
+
+
+class CandidateRankingUpdate(BaseModel):
+    candidate_id: str
+    new_score: float = Field(ge=0.0, le=1.0)
+    rank_change: int
+
+
+class ExperimentResultResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    score: float = Field(ge=0.0, le=1.0)
+    failure_mode: Optional[str] = None
+    repair_usefulness: str
+    feedback_summary: str
+    updated_candidate_ranking: Optional[List[CandidateRankingUpdate]] = None
 
 
 def validate_candidates(candidates: List[OracleCandidateCommand]) -> Dict[str, Any]:

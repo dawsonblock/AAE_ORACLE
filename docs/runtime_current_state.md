@@ -27,9 +27,9 @@ bash scripts/bootstrap_python.sh
 
 Bootstrap behavior now:
 
-- prefers `python` when available, otherwise uses `python3`
-- falls back to `virtualenv` when stdlib `venv` is unavailable
+- creates `.venv` from the repo root with `python -m venv`
 - installs from `aae-engine/requirements.txt`
+- expects repo verification to run through `scripts/verify_repo_state.sh`
 
 ### Verified runtime state
 

@@ -8,13 +8,6 @@ from typing import Any, Dict, Iterable, List, Tuple
 from fastapi import FastAPI, HTTPException
 
 from aae.oracle_bridge.contracts import Candidate, ContractVersion, PlanRequest
-from aae.oracle_bridge.oracle_adapters import (
-    CANDIDATE_SCHEMA_VERSION,
-    OracleCandidateCommand,
-    OraclePlanRequest,
-    OraclePlanResponse,
-    validate_response,
-)
 from aae.observability.event_logger import EventLogger
 from aae.planning.planner import Planner
 
@@ -53,26 +46,7 @@ def plan(request: PlanRequest):
     trace_id = request.trace_id or str(uuid.uuid4())
 
     try:
-        raw_candidates = planner.generate(
-            source_code=request.source_code,
-            target_files=request.target_files,
-            trace_id=trace_id,
-        )
-        # Normalize planner output to the canonical Candidate schema by
-        # dropping any fields not defined on the Candidate model. This prevents
-        # extra fields (e.g., "coverage_gain") from causing validation errors.
-        allowed_fields = set(Candidate.model_fields.keys())
-        normalized_candidates = []
-        for candidate in raw_candidates:
-            if isinstance(candidate, dict):
-                filtered_candidate = {k: v for k, v in candidate.items() if k in allowed_fields}
-                normalized_candidates.append(filtered_candidate)
-            else:
-                # If the planner returns non-dict candidates, preserve them as-is;
-                # Candidate.model_validate will handle any necessary coercion.
-                normalized_candidates.append(candidate)
-
-        candidates = [Candidate.model_validate(candidate) for candidate in normalized_candidates]
+        candidates = OraclePlanningBridge().plan(request.model_copy(update={"trace_id": trace_id}))
         _event_logger.log(
             {
                 "stage": "plan",
@@ -101,9 +75,6 @@ def plan(request: PlanRequest):
 
 
 class OraclePlanningBridge:
-    REPAIR_WORDS = {"fix", "repair", "bug", "patch", "failing", "failure", "regression", "broken"}
-    TEST_WORDS = {"test", "tests", "pytest", "xctest", "unit", "integration", "regression"}
-    REFACTOR_WORDS = {"refactor", "cleanup", "restructure", "harden", "simplify"}
     SOURCE_EXTENSIONS = {
         ".py",
         ".swift",
@@ -120,25 +91,25 @@ class OraclePlanningBridge:
         ".c",
     }
 
-    def plan(self, request: OraclePlanRequest) -> OraclePlanResponse:
-        summary, warnings = self._build_summary(
-            request.repo_path,
-            request.objective,
-            request.state_summary,
+    def plan(self, request: PlanRequest) -> List[Candidate]:
+        raw_candidates = planner.generate(
+            source_code=request.source_code,
+            target_files=request.target_files,
+            trace_id=request.trace_id,
         )
+        return self._normalize_candidates(raw_candidates)
+
+    def describe_oracle_request(
+        self,
+        *,
+        repo_path: str | None,
+        objective: str,
+        state_summary: str,
+    ) -> tuple[Dict[str, Any], List[str], str]:
+        summary, warnings = self._build_summary(repo_path, objective, state_summary)
         test_command = self._recommended_test_command(summary)
         summary["recommended_test_command"] = test_command
-        candidates = self._build_candidates(request, summary, test_command)
-        response = OraclePlanResponse(
-            goal_id=request.goal_id,
-            engine=CANDIDATE_SCHEMA_VERSION,
-            summary=summary,
-            warnings=warnings,
-            candidates=candidates[: request.max_candidates],
-        )
-        if any(candidate.confidence < 0.9 for candidate in response.candidates):
-            response.warnings.append("Low confidence candidates returned")
-        return validate_response(response)
+        return summary, warnings, test_command
 
     def _build_summary(
         self,
@@ -242,110 +213,13 @@ class OraclePlanningBridge:
             return "go test ./..."
         return "run repo-native test command"
 
-    def _build_candidates(
-        self,
-        request: OraclePlanRequest,
-        summary: Dict[str, Any],
-        test_command: str,
-    ) -> List[OracleCandidateCommand]:
-        objective = request.objective.lower()
-        candidate_paths = summary.get("repo_profile", {}).get("candidate_paths", [])
-        preferred_path = candidate_paths[0] if candidate_paths else None
-        candidates = [
-            OracleCandidateCommand(
-                candidate_id=f"{request.goal_id}-inspect",
-                kind="aae.inspect_repository",
-                tool="repository_analyzer",
-                payload={"repo_path": request.repo_path, "candidate_paths": candidate_paths},
-                rationale="Build a grounded repository profile before selecting a mutation or execution path.",
-                confidence=0.95,
-                predicted_score=0.70,
-                safety_class="read_only",
-            )
-        ]
-
-        if self._contains_any(objective, self.TEST_WORDS) or any("test" in path.lower() for path in candidate_paths):
-            candidates.append(
-                OracleCandidateCommand(
-                    candidate_id=f"{request.goal_id}-tests",
-                    kind="aae.run_targeted_tests",
-                    tool="sandbox",
-                    payload={"command": test_command, "candidate_paths": candidate_paths},
-                    rationale="Reproduce the current failure surface and capture a precise test baseline.",
-                    confidence=0.92,
-                    predicted_score=0.76,
-                    safety_class="sandboxed_write",
-                )
-            )
-
-        if self._contains_any(objective, self.REPAIR_WORDS) or self._contains_any(
-            request.state_summary.lower(),
-            self.REPAIR_WORDS,
-        ):
-            candidates.extend(
-                [
-                    OracleCandidateCommand(
-                        candidate_id=f"{request.goal_id}-localize",
-                        kind="aae.localize_failure",
-                        tool="localization_service",
-                        payload={"candidate_paths": candidate_paths},
-                        rationale="Fuse failure symptoms, repository structure, and test evidence into a smaller edit region.",
-                        confidence=0.90,
-                        predicted_score=0.82,
-                        safety_class="read_only",
-                    ),
-                    OracleCandidateCommand(
-                        candidate_id=f"{request.goal_id}-patch",
-                        kind="aae.generate_patch",
-                        tool="patch_engine",
-                        payload={"candidate_paths": candidate_paths, "workspace_relative_path": preferred_path},
-                        rationale="Generate a bounded candidate patch after localization narrows the edit surface.",
-                        confidence=0.90,
-                        predicted_score=0.79,
-                        safety_class="sandboxed_write",
-                        target_file=preferred_path,
-                    ),
-                    OracleCandidateCommand(
-                        candidate_id=f"{request.goal_id}-verify",
-                        kind="aae.validate_candidate",
-                        tool="verifier",
-                        payload={"command": test_command, "candidate_paths": candidate_paths},
-                        rationale="Run the candidate through the repository test command before Oracle accepts execution.",
-                        confidence=0.84,
-                        predicted_score=0.77,
-                        safety_class="sandboxed_write",
-                    ),
-                ]
-            )
-
-        if self._contains_any(objective, self.REFACTOR_WORDS):
-            candidates.append(
-                OracleCandidateCommand(
-                    candidate_id=f"{request.goal_id}-impact",
-                    kind="aae.estimate_change_impact",
-                    tool="graph_service",
-                    payload={"candidate_paths": candidate_paths},
-                    rationale="Estimate dependency blast radius before a broad structural edit.",
-                    confidence=0.83,
-                    predicted_score=0.74,
-                    safety_class="read_only",
-                )
-            )
-
-        if len(candidates) == 1:
-            candidates.append(
-                OracleCandidateCommand(
-                    candidate_id=f"{request.goal_id}-analyze",
-                    kind="aae.analyze_objective",
-                    tool="planner_service",
-                    payload={"candidate_paths": candidate_paths},
-                    rationale="Produce a ranked next-step analysis when no stronger repo-specific signal is available.",
-                    confidence=0.80,
-                    predicted_score=0.65,
-                    safety_class="read_only",
-                )
-            )
-        return candidates
-
-    def _contains_any(self, text: str, words: Iterable[str]) -> bool:
-        return any(word in text for word in words)
+    @staticmethod
+    def _normalize_candidates(raw_candidates: List[Dict[str, Any]] | List[Candidate]) -> List[Candidate]:
+        allowed_fields = set(Candidate.model_fields.keys())
+        normalized_candidates: list[dict[str, Any] | Candidate] = []
+        for candidate in raw_candidates:
+            if isinstance(candidate, dict):
+                normalized_candidates.append({key: value for key, value in candidate.items() if key in allowed_fields})
+            else:
+                normalized_candidates.append(candidate)
+        return [Candidate.model_validate(candidate) for candidate in normalized_candidates]

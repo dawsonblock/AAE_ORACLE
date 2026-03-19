@@ -200,18 +200,9 @@ public actor RuntimeOrchestrator: IntentAPI {
         try await commitCoordinator.commit(outcome.events)
     }
 
-    /// PHASE 4: Evaluate — critic review
+    /// PHASE 4: Evaluate — no-op until a stateful evaluator is wired in.
     public func evaluate(_ outcome: ExecutionOutcome) async {
-        let critic = CriticLoop()
-        _ = critic.evaluate(
-            preState: CompressedUIState(elements: []),
-            postState: CompressedUIState(elements: []),
-            schema: nil,
-            actionResult: ActionResult(
-                success: outcome.status == .success,
-                executedThroughExecutor: true
-            )
-        )
+        _ = outcome
     }
 }
 

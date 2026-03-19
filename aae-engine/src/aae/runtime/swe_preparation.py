@@ -81,7 +81,7 @@ class SWEPreparationService:
         from aae.learning.tool_router import ToolRouter
         from aae.memory.graph_memory import GraphMemory
         from aae.memory.trajectory_memory import TrajectoryMemory
-        from aae.planner.planner_runtime import PlannerRuntime
+        from aae.planning.planner_runtime import PlannerRuntime
 
         self.memory = memory
         self.event_bus = event_bus

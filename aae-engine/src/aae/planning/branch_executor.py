@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import time
 import sys
+import time
 
 from aae.contracts.planner import BranchExecutionResult
 from aae.contracts.sandbox import SandboxRunSpec
-from aae.sandbox.sandbox_api import SandboxAPI
 from aae.repair.repair_loop import RepairLoop
+from aae.sandbox.sandbox_api import SandboxAPI
 
 
 class BranchExecutor:
@@ -26,30 +26,20 @@ class BranchExecutor:
     ) -> BranchExecutionResult:
         command = self._test_command(selected_tests)
         started_at = time.perf_counter()
-        # Create a pre-patch checkpoint
         checkpoint_id = "%s-pre" % branch_id
         await self.sandbox_api.checkpoint(repo_path, checkpoint_id)
 
-        try:
-            results = await self.sandbox_api.run(
-                SandboxRunSpec(
-                    repo_path=repo_path,
-                    commands=[command],
-                    patch_diff=patch_diff,
-                    artifact_dir=artifact_dir,
-                    selected_tests=selected_tests,
-                    install_dependencies=False,
-                    repair_constraints=list((repair_guidance or {}).get("constraints", [])),
-                )
+        results = await self.sandbox_api.run(
+            SandboxRunSpec(
+                repo_path=repo_path,
+                commands=[command],
+                patch_diff=patch_diff,
+                artifact_dir=artifact_dir,
+                selected_tests=selected_tests,
+                install_dependencies=False,
+                repair_constraints=list((repair_guidance or {}).get("constraints", [])),
             )
-        finally:
-            # Ensure rollback happens if an error occurs during sandbox run or if repair is needed
-            # The original code had rollback conditional on exit_code, but if the sandbox run itself fails
-            # (e.g., network error), we still want to revert the patch.
-            # If repair is needed, the rollback will happen after repair_loop.run.
-            # This try-finally ensures a rollback in case of an exception during the sandbox run.
-            # The conditional rollback for repair is still handled below.
-            pass # The actual rollback logic is handled below based on exit_code or if an exception occurs.
+        )
 
         runtime_cost_s = time.perf_counter() - started_at
         result = results[0]
@@ -59,9 +49,8 @@ class BranchExecutor:
         repair_result = {}
         if exit_code:
             repair_result = self.repair_loop.run(result, patch_candidate or {}, artifact_dir)
-            # If repair failed or we want to revert manually
             await self.sandbox_api.rollback(repo_path, checkpoint_id)
-        
+
         return BranchExecutionResult(
             branch_id=branch_id,
             tests_passed=tests_passed,
@@ -73,4 +62,4 @@ class BranchExecutor:
 
     def _test_command(self, selected_tests: list[str]) -> str:
         args = " ".join(selected_tests) if selected_tests else ""
-        return '%s -m pytest %s -q' % (sys.executable, args)
+        return "%s -m pytest %s -q" % (sys.executable, args)

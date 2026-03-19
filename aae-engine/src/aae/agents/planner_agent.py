@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from aae.agents.micro_agents.base import BaseMicroAgent
-from aae.planner.long_horizon_planner import LongHorizonPlanner
+from aae.planning.long_horizon_planner import LongHorizonPlanner
 
 
 class PlannerAgent(BaseMicroAgent):

@@ -4,7 +4,7 @@ import asyncio
 from pathlib import Path
 from typing import Any, Dict, List
 
-from aae.planner.branch_executor import BranchExecutor
+from aae.planning.branch_executor import BranchExecutor
 
 
 class ExperimentRunner:

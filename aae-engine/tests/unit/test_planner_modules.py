@@ -1,5 +1,5 @@
-from aae.planner.long_horizon_planner import LongHorizonPlanner
-from aae.planner.replanner import Replanner
+from aae.planning.long_horizon_planner import LongHorizonPlanner
+from aae.planning.replanner import Replanner
 
 
 def test_long_horizon_planner_fix_test():

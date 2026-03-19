@@ -39,7 +39,6 @@ Primary files:
 
 - `Sources/OracleOS/Runtime/RuntimeOrchestrator.swift`
 - `Sources/OracleOS/Runtime/RuntimeContext.swift`
-- `Sources/OracleOS/Runtime/RuntimeExecutionDriver.swift`
 - `Sources/OracleOS/Runtime/TaskContext.swift`
 
 Responsibilities:

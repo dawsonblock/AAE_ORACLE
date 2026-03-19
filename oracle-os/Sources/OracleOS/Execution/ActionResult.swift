@@ -128,10 +128,22 @@ public struct ActionResult: Sendable, Codable {
     }
 }
 
-// MARK: - Legacy Compatibility Shim
+// MARK: - Compatibility Executor Wrapper
 
-/// Backward-compatibility shim: preserves pre-refactor API used by Actions.swift and RuntimeContext.
-/// New code should use VerifiedExecutor actor directly.
+public enum ExecutionSource: String, Sendable, Codable {
+    case agentLoop
+}
+
+public struct ExecutionContext: Sendable, Codable {
+    public let source: ExecutionSource
+
+    public init(source: ExecutionSource) {
+        self.source = source
+    }
+}
+
+/// Compatibility wrapper used by injected action helpers while the runtime
+/// continues to route side effects through the AgentLoop spine.
 public final class VerifiedActionExecutor: @unchecked Sendable {
     public init(
         traceRecorder: TraceRecorder? = nil,
@@ -141,15 +153,17 @@ public final class VerifiedActionExecutor: @unchecked Sendable {
         stateMemoryIndex: StateMemoryIndex? = nil
     ) {}
 
-    public init() {}
-
     public func run(
         taskID: String?,
         toolName: String?,
         intent: ActionIntent,
         surface: RuntimeSurface,
+        context: ExecutionContext,
         action: () -> ToolResult
     ) -> ToolResult {
+        guard context.source == .agentLoop else {
+            fatalError("Unauthorized execution path")
+        }
         let result = action()
         var data = result.data ?? [:]
         let existing = ActionResult.from(dict: data["action_result"] as? [String: Any] ?? [:])
@@ -177,19 +191,6 @@ public final class VerifiedActionExecutor: @unchecked Sendable {
             error: result.error,
             suggestion: result.suggestion,
             context: result.context
-        )
-    }
-
-    public static func run(
-        intent: ActionIntent,
-        action: () -> ToolResult
-    ) -> ToolResult {
-        VerifiedActionExecutor().run(
-            taskID: nil,
-            toolName: nil,
-            intent: intent,
-            surface: .mcp,
-            action: action
         )
     }
 }
@@ -226,7 +227,8 @@ extension RuntimeOrchestrator {
         )
     }
 
-    /// Legacy synchronous performAction bridge (full metadata form) for RuntimeExecutionDriver.swift.
+    /// Legacy synchronous performAction bridge retained for callers that still
+    /// invoke the runtime synchronously through RuntimeOrchestrator.
     public nonisolated func performAction(
         surface: RuntimeSurface,
         taskID: String?,

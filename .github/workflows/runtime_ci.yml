@@ -1,0 +1,43 @@
+name: Runtime Enforcement
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Bootstrap
+        run: bash scripts/bootstrap_python.sh
+
+      - name: Verify runtime invariants
+        run: bash scripts/verify_repo_state.sh
+
+      - name: Run tests
+        run: |
+          source .venv/bin/activate
+          export PYTHONPATH="$GITHUB_WORKSPACE/aae-engine/src${PYTHONPATH:+:$PYTHONPATH}"
+          python -m pytest -q aae-engine/tests
+
+  swift:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        working-directory: oracle-os
+        run: swift build
+
+      - name: Test
+        working-directory: oracle-os
+        run: swift test

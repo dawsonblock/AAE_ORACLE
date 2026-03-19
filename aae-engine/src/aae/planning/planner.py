@@ -5,16 +5,29 @@ from typing import Any, Dict, List, Optional
 
 from aae.analysis.coverage_runner import CoverageRunner
 from aae.code_analysis import CodeAnalyzer
+from aae.contracts.planner import PlanBranch
 from aae.observability.event_logger import EventLogger
+from aae.planning.beam_search import BeamSearch
+from aae.planning.branch_memory import BranchMemory
 from aae.planning.mutator import Mutator
+from aae.planning.plan_evaluator import PlanEvaluator
 from aae.planning.ranker import CandidateRanker
+from aae.planning.rollout_simulator import RolloutSimulator
 from aae.planning.templates import PatchTemplates
+from aae.planning.tree_search import TreeSearch
 from aae.planning.validator import validate
 from aae.storage.ranking_store import RankingStore
 
 
 class Planner:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        evaluator: PlanEvaluator | None = None,
+        beam_search: BeamSearch | None = None,
+        tree_search: TreeSearch | None = None,
+        rollout_simulator: RolloutSimulator | None = None,
+        branch_memory: BranchMemory | None = None,
+    ) -> None:
         self.analyzer = CodeAnalyzer()
         self.templates = PatchTemplates()
         self.mutator = Mutator()
@@ -22,6 +35,11 @@ class Planner:
         self.ranking_store = RankingStore()
         self.ranker = CandidateRanker(self.ranking_store)
         self.event_logger = EventLogger()
+        self.evaluator = evaluator or PlanEvaluator()
+        self.beam_search = beam_search or BeamSearch()
+        self.tree_search = tree_search or TreeSearch()
+        self.rollout_simulator = rollout_simulator or RolloutSimulator()
+        self.branch_memory = branch_memory or BranchMemory()
 
     def _candidate_id(self, code: str) -> str:
         return hashlib.sha256(code.encode("utf-8")).hexdigest()[:16]
@@ -88,3 +106,20 @@ class Planner:
                     candidates.append(candidate)
 
         return self.ranker.rank(candidates)[:3]
+
+    def build_plan(self, candidates: list[dict]) -> list[PlanBranch]:
+        branches = self.tree_search.expand(candidates)
+        for branch in branches:
+            branch.score = self.evaluator.score(branch) + self.rollout_simulator.score(branch)
+            if branch.score <= 0:
+                self.branch_memory.remember(
+                    branch,
+                    status="rejected",
+                    rejection_reason="non-positive rollout score",
+                )
+            else:
+                self.branch_memory.remember(branch, status="explored")
+        shortlisted = self.beam_search.prune([branch for branch in branches if branch.score > 0])
+        for branch in shortlisted:
+            branch.metadata["search_score"] = branch.score
+        return shortlisted

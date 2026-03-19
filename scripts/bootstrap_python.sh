@@ -1,20 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ -z "${PYTHON_BIN+x}" ]; then
-  PYTHON_BIN="python3"
-  if command -v python >/dev/null 2>&1; then
-    PYTHON_BIN="python"
-  fi
-fi
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
 
-rm -rf .venv
-
-if ! "${PYTHON_BIN}" -m venv .venv; then
-  "${PYTHON_BIN}" -m pip install --user virtualenv
-  "${PYTHON_BIN}" -m virtualenv .venv
-fi
+python -m venv .venv
 source .venv/bin/activate
 
-pip install --upgrade pip
-pip install -r aae-engine/requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r aae-engine/requirements.txt

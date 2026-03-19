@@ -16,7 +16,7 @@ from aae.agents.micro_agents.orchestration.consensus_engine import ConsensusEngi
 from aae.agents.micro_agents.orchestration.solution_judge import SolutionJudge
 from aae.agents.micro_agents.registry import MicroAgentRegistry
 from aae.contracts.planner import CandidatePlan
-from aae.planner.simulation.patch_simulator import PatchSimulator
+from aae.planning.simulation.patch_simulator import PatchSimulator
 
 
 class SwarmController:

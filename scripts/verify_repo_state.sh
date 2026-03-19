@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYTHON_BIN="${PYTHON_BIN:-python3}"
+cd "$ROOT_DIR"
 
-cd "$ROOT_DIR/aae-engine"
+if [ ! -f ".venv/bin/activate" ]; then
+  echo "Bootstrap missing. Run scripts/bootstrap_python.sh first." >&2
+  exit 1
+fi
 
-"$PYTHON_BIN" -m compileall src
-"$PYTHON_BIN" -m pytest --collect-only
-"$PYTHON_BIN" -m pytest -q || true
+source .venv/bin/activate
+export PYTHONPATH="$ROOT_DIR/aae-engine/src${PYTHONPATH:+:$PYTHONPATH}"
 
-echo "Run swift build and swift test separately on a macOS runner."
+python scripts/check_contracts.py
+python scripts/drift_detector.py
+python -m compileall aae-engine/src
+python -m pytest --collect-only -q aae-engine/tests

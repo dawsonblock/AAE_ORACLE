@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from aae.contracts.planner import SimulationResult
 from aae.behavior_model.behavior_query_engine import BehaviorQueryEngine
+from aae.contracts.planner import SimulationResult
 from aae.graph.graph_query import GraphQueryEngine
 from aae.simulation.dependency_impact import DependencyImpactAnalyzer
 from aae.simulation.risk_estimator import RiskEstimator
