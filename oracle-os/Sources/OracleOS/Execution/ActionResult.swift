@@ -150,7 +150,34 @@ public final class VerifiedActionExecutor: @unchecked Sendable {
         surface: RuntimeSurface,
         action: () -> ToolResult
     ) -> ToolResult {
-        return action()
+        let result = action()
+        var data = result.data ?? [:]
+        let existing = ActionResult.from(dict: data["action_result"] as? [String: Any] ?? [:])
+        let stamped = ActionResult(
+            success: result.success,
+            verified: existing?.verified ?? result.success,
+            message: existing?.message ?? result.error,
+            method: existing?.method,
+            verificationStatus: existing?.verificationStatus,
+            failureClass: existing?.failureClass,
+            elapsedMs: existing?.elapsedMs ?? 0,
+            policyDecision: existing?.policyDecision,
+            protectedOperation: existing?.protectedOperation,
+            approvalRequestID: existing?.approvalRequestID,
+            approvalStatus: existing?.approvalStatus,
+            surface: existing?.surface ?? surface.rawValue,
+            appProtectionProfile: existing?.appProtectionProfile,
+            blockedByPolicy: existing?.blockedByPolicy ?? false,
+            executedThroughExecutor: true
+        )
+        data["action_result"] = stamped.toDict()
+        return ToolResult(
+            success: result.success,
+            data: data,
+            error: result.error,
+            suggestion: result.suggestion,
+            context: result.context
+        )
     }
 
     public static func run(

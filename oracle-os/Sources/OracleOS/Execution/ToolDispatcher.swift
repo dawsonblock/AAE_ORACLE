@@ -28,6 +28,9 @@ public struct ToolDispatcher: @unchecked Sendable {
         _ command: any Command,
         capabilities: [String]
     ) async throws -> (observations: [ObservationPayload], artifacts: [ArtifactPayload]) {
+        guard capabilities.contains(command.kind) else {
+            throw ToolDispatcherError.capabilityNotAvailable(command.kind)
+        }
         switch command.kind {
         // MARK: UI Commands
         case "clickElement":
@@ -105,9 +108,7 @@ public struct ToolDispatcher: @unchecked Sendable {
     // MARK: - Code Command Dispatchers
 
     private func dispatchSearchRepository(_ command: any Command) async throws -> (observations: [ObservationPayload], artifacts: [ArtifactPayload]) {
-        guard let ctx = context else {
-            return ([ObservationPayload(kind: "search", content: "no-context: skipped")], [])
-        }
+        guard let ctx = context else { throw ToolDispatcherError.capabilityNotAvailable("runtime-context") }
         let query = (command as? SearchRepositoryCommand)?.query ?? ""
         let root = await MainActor.run { ctx.config.traceDirectory.deletingLastPathComponent() }
         let snapshot = await MainActor.run { ctx.repositoryIndexer.indexIfNeeded(workspaceRoot: root) }
@@ -143,9 +144,7 @@ public struct ToolDispatcher: @unchecked Sendable {
     }
 
     private func dispatchRunBuild(_ command: any Command) async throws -> (observations: [ObservationPayload], artifacts: [ArtifactPayload]) {
-        guard let ctx = context else {
-            return ([ObservationPayload(kind: "build", content: "no-context: skipped")], [])
-        }
+        guard let ctx = context else { throw ToolDispatcherError.capabilityNotAvailable("runtime-context") }
         let workspacePath = (command as? RunBuildCommand)?.workspacePath
         let fallback = await MainActor.run { ctx.config.traceDirectory.deletingLastPathComponent().path }
         let root = workspacePath ?? fallback
@@ -163,9 +162,7 @@ public struct ToolDispatcher: @unchecked Sendable {
     }
 
     private func dispatchRunTests(_ command: any Command) async throws -> (observations: [ObservationPayload], artifacts: [ArtifactPayload]) {
-        guard let ctx = context else {
-            return ([ObservationPayload(kind: "test", content: "no-context: skipped")], [])
-        }
+        guard let ctx = context else { throw ToolDispatcherError.capabilityNotAvailable("runtime-context") }
         let filter = (command as? RunTestsCommand)?.filter
         var args = ["test"]
         if let f = filter { args += ["--filter", f] }

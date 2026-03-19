@@ -1,8 +1,10 @@
 import Foundation
 
+// NOT USED IN RUNTIME
 /// DEPRECATED: Direct code execution bypass.
 /// All code actions must route through VerifiedExecutor → ToolDispatcher.
 /// This type will be removed once RuntimeExecutionDriver is fully converted to the IntentAPI path.
+@available(*, deprecated, message: "Not used in runtime; route code actions through RuntimeOrchestrator.")
 @MainActor
 public struct CodeActionGateway {
     public let context: RuntimeContext
