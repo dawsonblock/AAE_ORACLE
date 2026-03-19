@@ -123,6 +123,8 @@ def validate_candidates(candidates: List[OracleCandidateCommand]) -> Dict[str, A
 
     return {
         "total_candidates": len(candidates),
+        "valid": valid,
+        "rejected": rejected,
         "valid_candidates": len(valid),
         "rejected_candidates": len(rejected),
         "requires_approval_candidates": requires_approval_ids,
@@ -133,6 +135,7 @@ def validate_candidates(candidates: List[OracleCandidateCommand]) -> Dict[str, A
 
 def validate_response(response: OraclePlanResponse) -> OraclePlanResponse:
     validation = validate_candidates(response.candidates)
+    response.candidates = validation["valid"]
     if validation["rejected_candidates"] > 0:
         response.warnings.append(
             f"Warning: {validation['rejected_candidates']} candidates rejected during validation"
@@ -224,12 +227,17 @@ def convert_oracle_result_request(request: OracleExperimentResultRequest) -> Exp
             and getattr(build_results, "success", execution_status == "success")
             and not safety_violations
         )
+    raw_candidate_type = getattr(request, "candidate_type", CandidateType.PATCH.value)
+    try:
+        candidate_type = CandidateType(raw_candidate_type)
+    except ValueError:
+        candidate_type = CandidateType.PATCH
 
     return ExperimentResultRequest(
         trace_id=getattr(request, "trace_id", None) or "legacy-trace",
         goal=getattr(request, "goal_id", None) or getattr(request, "goal", "repair"),
         candidate_id=getattr(request, "candidate_id", ""),
-        candidate_type=CandidateType.PATCH,
+        candidate_type=candidate_type,
         target_files=getattr(request, "touched_files", []) or getattr(request, "target_files", []),
         accepted=accepted,
         execution_result=execution_status,

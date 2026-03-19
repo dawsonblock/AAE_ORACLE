@@ -17,7 +17,7 @@ from aae.oracle_bridge.oracle_adapters import (
 )
 from aae.oracle_bridge.result_contracts import ExperimentResultResponse, OracleExperimentResultRequest
 from aae.oracle_bridge.result_service import ResultService, get_telemetry
-from aae.oracle_bridge.service import OraclePlanningBridge, app as oracle_bridge_app
+from aae.oracle_bridge.service import OraclePlanningBridge
 from aae.storage.experiment_store import ExperimentStore
 from aae.storage.ranking_store import RankingStore
 

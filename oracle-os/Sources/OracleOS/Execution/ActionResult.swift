@@ -195,7 +195,7 @@ public final class VerifiedActionExecutor: @unchecked Sendable {
 }
 
 extension RuntimeOrchestrator {
-    /// Legacy context property — provides RuntimeContext for CodeActionGateway compatibility.
+    /// Legacy context property retained for compatibility shims.
     public nonisolated var context: RuntimeContext { _legacyContext! }
 
     /// Legacy synchronous performAction bridge (simple form) for Actions.swift.

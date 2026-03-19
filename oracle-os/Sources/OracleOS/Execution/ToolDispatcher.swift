@@ -9,18 +9,14 @@ public struct ToolDispatcher: @unchecked Sendable {
 
     /// Optional automation host for UI commands (injected for testability).
     private let automationHost: AutomationHost?
-    /// Optional workspace runner for code commands.
-    private let workspaceRunner: WorkspaceRunner?
     /// Optional RuntimeContext for legacy code actions (bridge).
     private let context: RuntimeContext?
 
     public init(
         automationHost: AutomationHost? = nil,
-        workspaceRunner: WorkspaceRunner? = nil,
         context: RuntimeContext? = nil
     ) {
         self.automationHost = automationHost
-        self.workspaceRunner = workspaceRunner
         self.context = context
     }
 

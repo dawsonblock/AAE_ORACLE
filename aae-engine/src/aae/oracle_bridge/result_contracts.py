@@ -72,6 +72,7 @@ class OracleExperimentResultRequest(BaseModel):
     """Oracle-specific result payload that adapts into the canonical ingest contract."""
     goal_id: str
     candidate_id: str
+    candidate_type: str = "patch"
     command_executed: str
     touched_files: List[str] = Field(default_factory=list)
     test_results: TestResultSummary
