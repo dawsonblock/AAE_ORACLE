@@ -6,7 +6,7 @@ from pathlib import Path
 from aae.exploration.branch_generator import BranchGenerator
 from aae.exploration.experiment_runner import ExperimentRunner
 from aae.exploration.result_comparator import ResultComparator
-from aae.planner.planner_runtime import PlannerRuntime
+from aae.planning.planner_runtime import PlannerRuntime
 
 
 class PlannerService:

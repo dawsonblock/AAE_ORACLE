@@ -5,7 +5,7 @@ import pytest
 from aae.agents.micro_agents.orchestration.swarm_controller import SwarmController
 from aae.graph.graph_query import GraphQueryEngine
 from aae.graph.repo_graph_builder import RepoGraphBuilder
-from aae.planner.planner_runtime import PlannerRuntime
+from aae.planning.planner_runtime import PlannerRuntime
 from aae.tools.graph_tools import GraphContextBuilder
 
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from aae.contracts.planner import PlannerDecision, PlannerState
-from aae.planner.planner import Planner
+from aae.planning.planner import Planner
 
 
 class PlannerRuntime:
@@ -31,7 +31,10 @@ class PlannerRuntime:
             candidate.setdefault("evidence", swarm_result.get("bug_localization", {}).get("evidence", []))
             candidate.setdefault("ranked_files", graph_context.get("ranked_files", []))
             candidate.setdefault("related_symbols", graph_context.get("reference_context", []))
-            candidate.setdefault("repair_guidance", candidate.get("repair_guidance") or swarm_result.get("selected_plan", {}).get("repair_guidance", {}))
+            candidate.setdefault(
+                "repair_guidance",
+                candidate.get("repair_guidance") or swarm_result.get("selected_plan", {}).get("repair_guidance", {}),
+            )
             candidates.append(candidate)
         if not candidates and swarm_result.get("selected_plan"):
             selected = dict(swarm_result["selected_plan"])

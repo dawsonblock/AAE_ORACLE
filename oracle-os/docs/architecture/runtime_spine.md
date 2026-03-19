@@ -60,8 +60,8 @@ Intent (submitIntent via IntentAPI)
 
 ## Remaining Work (Waves 1C-3D)
 
-- **AgentLoop** (`Execution/Loop/AgentLoop.swift`) — uses legacy spine; needs narrowing to RuntimeOrchestrator
-- **RuntimeExecutionDriver** — still calls `performAction()` (legacy shim); needs conversion to intent translator
+- **AgentLoop** (`Execution/Loop/AgentLoop.swift`) — still needs planner-surface narrowing, but execution authority is now explicit
+- **RuntimeExecutionDriver** — deleted after cutover; AgentLoop routes through `RuntimeOrchestrator`
 - **CodeActionGateway** — bypass executor; must be deprecated then deleted
 - **ToolDispatcher** — handlers stub; needs bridging to Skills infrastructure
 - **MainPlanner** — needs extraction into route-only façade + Strategies/

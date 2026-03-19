@@ -18,13 +18,11 @@ public final class AgentLoop {
     let worldModel: WorldStateModel
     let aaePlanningAdvisor: OracleAAEPlanningAdvisor?
 
-    /// NEW: IntentAPI-based orchestrator for the new execution spine.
-    /// When set, the run loop should prefer this over legacy coordinator path.
+    /// The execution authority injected into the loop.
     public let orchestrator: any IntentAPI
 
-    /// NEW preferred init — uses RuntimeOrchestrator as the execution spine.
-    /// This is the target architecture: AgentLoop becomes a thin wrapper that
-    /// submits intents through RuntimeOrchestrator.
+    /// AgentLoop stays orchestration-only and submits intents through the
+    /// authoritative runtime spine.
     public init(
         orchestrator: any IntentAPI,
         observationProvider: any ObservationProvider,

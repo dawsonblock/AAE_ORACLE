@@ -11,11 +11,12 @@ from aae.analysis.replay import ReplayEngine
 from aae.analysis.structured_logger import StructuredEventLogger, generate_trace_id
 from aae.oracle_bridge.contracts import ContractVersion, ExperimentResultRequest as CanonicalExperimentResultRequest, PlanRequest
 from aae.oracle_bridge.oracle_adapters import (
+    ExperimentResultResponse,
     OraclePlanRequest,
+    OracleExperimentResultRequest,
     convert_oracle_request,
     convert_oracle_result_request,
 )
-from aae.oracle_bridge.result_contracts import ExperimentResultResponse, OracleExperimentResultRequest
 from aae.oracle_bridge.result_service import ResultService, get_telemetry
 from aae.oracle_bridge.service import OraclePlanningBridge
 from aae.storage.experiment_store import ExperimentStore
@@ -145,12 +146,12 @@ async def plan(request: OraclePlanRequest):
         # Propagate generated trace_id back onto the request for downstream logging/observability
         request.trace_id = trace_id
     canonical_request: PlanRequest = convert_oracle_request(request)
-    
+
     start = time.perf_counter()
-    result = BRIDGE.plan(request)
+    response_model = BRIDGE.plan(request)
     duration_ms = (time.perf_counter() - start) * 1000
-    
-    for candidate in result.candidates:
+
+    for candidate in response_model.candidates:
         _event_logger.log(
             {
                 "stage": "candidate",
@@ -168,13 +169,13 @@ async def plan(request: OraclePlanRequest):
             "stage": "plan",
             "goal_id": request.goal_id,
             "trace_id": trace_id,
-            "candidate_count": len(result.candidates),
+            "candidate_count": len(response_model.candidates),
             "latency_ms": round(duration_ms, 2),
             "canonical_request": canonical_request.model_dump(mode="json"),
         }
     )
 
-    response = result.model_dump()
+    response = response_model.model_dump()
     response["trace_id"] = trace_id
     return response
 

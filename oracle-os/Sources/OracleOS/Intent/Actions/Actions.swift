@@ -97,7 +97,8 @@ public enum Actions {
             taskID: taskID,
             toolName: toolName,
             intent: intent,
-            surface: surface
+            surface: surface,
+            context: ExecutionContext(source: .agentLoop)
         ) {
             action()
         }

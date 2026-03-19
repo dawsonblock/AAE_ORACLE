@@ -3,8 +3,9 @@
 ## Run the AAE bridge
 
 ```bash
-cd aae-engine
-python -m pip install -e .
+bash scripts/bootstrap_python.sh
+source .venv/bin/activate
+export PYTHONPATH="$PWD/aae-engine/src"
 python -m aae.dashboard_api.server --host 127.0.0.1 --port 8787
 ```
 

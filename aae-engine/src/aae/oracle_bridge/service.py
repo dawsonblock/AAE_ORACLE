@@ -13,6 +13,8 @@ from aae.oracle_bridge.oracle_adapters import (
     OracleCandidateCommand,
     OraclePlanRequest,
     OraclePlanResponse,
+    convert_oracle_request,
+    convert_oracle_response,
     validate_response,
 )
 from aae.observability.event_logger import EventLogger
@@ -53,26 +55,7 @@ def plan(request: PlanRequest):
     trace_id = request.trace_id or str(uuid.uuid4())
 
     try:
-        raw_candidates = planner.generate(
-            source_code=request.source_code,
-            target_files=request.target_files,
-            trace_id=trace_id,
-        )
-        # Normalize planner output to the canonical Candidate schema by
-        # dropping any fields not defined on the Candidate model. This prevents
-        # extra fields (e.g., "coverage_gain") from causing validation errors.
-        allowed_fields = set(Candidate.model_fields.keys())
-        normalized_candidates = []
-        for candidate in raw_candidates:
-            if isinstance(candidate, dict):
-                filtered_candidate = {k: v for k, v in candidate.items() if k in allowed_fields}
-                normalized_candidates.append(filtered_candidate)
-            else:
-                # If the planner returns non-dict candidates, preserve them as-is;
-                # Candidate.model_validate will handle any necessary coercion.
-                normalized_candidates.append(candidate)
-
-        candidates = [Candidate.model_validate(candidate) for candidate in normalized_candidates]
+        candidates = OraclePlanningBridge().plan(request.model_copy(update={"trace_id": trace_id}))
         _event_logger.log(
             {
                 "stage": "plan",
@@ -101,9 +84,6 @@ def plan(request: PlanRequest):
 
 
 class OraclePlanningBridge:
-    REPAIR_WORDS = {"fix", "repair", "bug", "patch", "failing", "failure", "regression", "broken"}
-    TEST_WORDS = {"test", "tests", "pytest", "xctest", "unit", "integration", "regression"}
-    REFACTOR_WORDS = {"refactor", "cleanup", "restructure", "harden", "simplify"}
     SOURCE_EXTENSIONS = {
         ".py",
         ".swift",
@@ -120,25 +100,44 @@ class OraclePlanningBridge:
         ".c",
     }
 
-    def plan(self, request: OraclePlanRequest) -> OraclePlanResponse:
-        summary, warnings = self._build_summary(
-            request.repo_path,
-            request.objective,
-            request.state_summary,
+    def plan(self, request: PlanRequest | OraclePlanRequest) -> List[Candidate] | OraclePlanResponse:
+        if isinstance(request, OraclePlanRequest):
+            summary, warnings, test_command = self.describe_oracle_request(
+                repo_path=request.repo_path,
+                objective=request.objective,
+                state_summary=request.state_summary,
+            )
+            response = OraclePlanResponse(
+                goal_id=request.goal_id,
+                engine=CANDIDATE_SCHEMA_VERSION,
+                summary=summary,
+                warnings=warnings,
+                candidates=self._build_candidates(request, summary, test_command)[: request.max_candidates],
+            )
+            if any(candidate.confidence < 0.9 for candidate in response.candidates):
+                response.warnings.append("Low confidence candidates returned")
+            return validate_response(response)
+        return self._plan_canonical(request)
+
+    def _plan_canonical(self, request: PlanRequest) -> List[Candidate]:
+        raw_candidates = planner.generate(
+            source_code=request.source_code,
+            target_files=request.target_files,
+            trace_id=request.trace_id,
         )
+        return self._normalize_candidates(raw_candidates)
+
+    def describe_oracle_request(
+        self,
+        *,
+        repo_path: str | None,
+        objective: str,
+        state_summary: str,
+    ) -> tuple[Dict[str, Any], List[str], str]:
+        summary, warnings = self._build_summary(repo_path, objective, state_summary)
         test_command = self._recommended_test_command(summary)
         summary["recommended_test_command"] = test_command
-        candidates = self._build_candidates(request, summary, test_command)
-        response = OraclePlanResponse(
-            goal_id=request.goal_id,
-            engine=CANDIDATE_SCHEMA_VERSION,
-            summary=summary,
-            warnings=warnings,
-            candidates=candidates[: request.max_candidates],
-        )
-        if any(candidate.confidence < 0.9 for candidate in response.candidates):
-            response.warnings.append("Low confidence candidates returned")
-        return validate_response(response)
+        return summary, warnings, test_command
 
     def _build_summary(
         self,
@@ -242,6 +241,26 @@ class OraclePlanningBridge:
             return "go test ./..."
         return "run repo-native test command"
 
+    def plan_oracle_from_canonical(
+        self,
+        *,
+        request: OraclePlanRequest,
+        candidates: List[Candidate],
+    ) -> OraclePlanResponse:
+        summary, warnings, test_command = self.describe_oracle_request(
+            repo_path=request.repo_path,
+            objective=request.objective,
+            state_summary=request.state_summary,
+        )
+        return convert_oracle_response(
+            goal_id=request.goal_id,
+            candidates=candidates,
+            summary=summary,
+            warnings=warnings,
+            recommended_test_command=test_command,
+            max_candidates=request.max_candidates,
+        )
+
     def _build_candidates(
         self,
         request: OraclePlanRequest,
@@ -264,7 +283,9 @@ class OraclePlanningBridge:
             )
         ]
 
-        if self._contains_any(objective, self.TEST_WORDS) or any("test" in path.lower() for path in candidate_paths):
+        if self._contains_any(objective, {"test", "tests", "pytest", "xctest", "unit", "integration", "regression"}) or any(
+            "test" in path.lower() for path in candidate_paths
+        ):
             candidates.append(
                 OracleCandidateCommand(
                     candidate_id=f"{request.goal_id}-tests",
@@ -278,10 +299,8 @@ class OraclePlanningBridge:
                 )
             )
 
-        if self._contains_any(objective, self.REPAIR_WORDS) or self._contains_any(
-            request.state_summary.lower(),
-            self.REPAIR_WORDS,
-        ):
+        repair_words = {"fix", "repair", "bug", "patch", "failing", "failure", "regression", "broken"}
+        if self._contains_any(objective, repair_words) or self._contains_any(request.state_summary.lower(), repair_words):
             candidates.extend(
                 [
                     OracleCandidateCommand(
@@ -318,7 +337,7 @@ class OraclePlanningBridge:
                 ]
             )
 
-        if self._contains_any(objective, self.REFACTOR_WORDS):
+        if self._contains_any(objective, {"refactor", "cleanup", "restructure", "harden", "simplify"}):
             candidates.append(
                 OracleCandidateCommand(
                     candidate_id=f"{request.goal_id}-impact",
@@ -347,5 +366,17 @@ class OraclePlanningBridge:
             )
         return candidates
 
-    def _contains_any(self, text: str, words: Iterable[str]) -> bool:
+    @staticmethod
+    def _contains_any(text: str, words: set[str]) -> bool:
         return any(word in text for word in words)
+
+    @staticmethod
+    def _normalize_candidates(raw_candidates: List[Dict[str, Any]] | List[Candidate]) -> List[Candidate]:
+        allowed_fields = set(Candidate.model_fields.keys())
+        normalized_candidates: list[dict[str, Any] | Candidate] = []
+        for candidate in raw_candidates:
+            if isinstance(candidate, dict):
+                normalized_candidates.append({key: value for key, value in candidate.items() if key in allowed_fields})
+            else:
+                normalized_candidates.append(candidate)
+        return [Candidate.model_validate(candidate) for candidate in normalized_candidates]
