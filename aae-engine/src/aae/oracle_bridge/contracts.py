@@ -1,27 +1,65 @@
-
-from __future__ import annotations
-
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional
-from pydantic import BaseModel, Field
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
-# MARK: - Schema Version
+class ContractVersion(str, Enum):
+    V1 = "v1"
+
+
+class CandidateType(str, Enum):
+    PATCH = "patch"
+    REFACTOR = "refactor"
+    CONFIG = "config"
+
+
+class RiskLevel(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class PlanRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: ContractVersion = ContractVersion.V1
+    goal: str
+    source_code: str
+    target_files: List[str] = Field(default_factory=list)
+    trace_id: Optional[str] = None
+
+
+class Candidate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    type: CandidateType
+    confidence: float
+    risk: RiskLevel
+    target_files: List[str]
+    diff: str
+    trace_id: Optional[str] = None
+
+
+class ExperimentResultRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: ContractVersion = ContractVersion.V1
+    trace_id: str
+    goal: str
+    candidate_id: str
+    candidate_type: CandidateType
+    target_files: List[str]
+    accepted: bool
+    execution_result: str
+    metrics: dict
+
 
 CANDIDATE_SCHEMA_VERSION = "aae.oracle_bridge.v1"
 
 
-# MARK: - Contract Version
-
-class ContractVersion(str, Enum):
-    """Versioned contract for Oracle ↔ AAE communication."""
-    V1 = "v1"
-
-
-# MARK: - Enums
-
 class CandidateKind(str, Enum):
-    """Allowed candidate kind values - must match OracleAAECandidateKind in Swift."""
     INSPECT_REPOSITORY = "aae.inspect_repository"
     ANALYZE_OBJECTIVE = "aae.analyze_objective"
     RUN_TARGETED_TESTS = "aae.run_targeted_tests"
@@ -36,7 +74,6 @@ class CandidateKind(str, Enum):
 
 
 class ToolName(str, Enum):
-    """Allowed tool name values - must match OracleAAEToolName in Swift."""
     REPOSITORY_ANALYZER = "repository_analyzer"
     PLANNER_SERVICE = "planner_service"
     SANDBOX = "sandbox"
@@ -51,7 +88,6 @@ class ToolName(str, Enum):
 
 
 class SafetyClass(str, Enum):
-    """Allowed safety class values - must match OracleAAESafetyClass in Swift."""
     READ_ONLY = "read_only"
     BOUNDED_MUTATION = "bounded_mutation"
     REQUIRES_APPROVAL = "requires_approval"
@@ -62,30 +98,22 @@ class SafetyClass(str, Enum):
         return [item.value for item in cls]
 
 
-# MARK: - Validation Errors
-
-class CandidateValidationError(Exception):
-    """Raised when a candidate fails validation."""
-    def __init__(self, errors: List[str]):
-        self.errors = errors
-        super().__init__(f"Candidate validation failed: {'; '.join(errors)}")
-
-
-# MARK: - Models
-
 class OraclePlanRequest(BaseModel):
-    version: Literal[ContractVersion.V1.value] = Field(default=ContractVersion.V1.value)
-    goal_id: str = Field(default='oracle-goal')
+    model_config = ConfigDict(extra="allow")
+
+    version: str = ContractVersion.V1.value
+    goal_id: str = "oracle-goal"
     objective: str
     repo_path: Optional[str] = None
-    state_summary: str = ''
+    state_summary: str = ""
     constraints: Dict[str, Any] = Field(default_factory=dict)
     max_candidates: int = Field(default=5, ge=1, le=20)
     trace_id: Optional[str] = None
 
 
 class OracleCandidateCommand(BaseModel):
-    """Candidate command proposed by AAE. Validation is deferred to validate_candidates()."""
+    model_config = ConfigDict(extra="allow")
+
     candidate_id: str
     kind: str
     tool: str
@@ -95,43 +123,26 @@ class OracleCandidateCommand(BaseModel):
     predicted_score: float
     safety_class: str
     target_file: Optional[str] = None
+    ranked_fallback_paths: Optional[List[str]] = None
+    recommended_test_command: Optional[str] = None
+    dominant_language: Optional[str] = None
+    patch_file_count_limit: Optional[int] = None
 
     def requires_approval(self) -> bool:
-        """Check if this candidate requires operator approval."""
         return self.safety_class == SafetyClass.REQUIRES_APPROVAL.value
 
 
 class OraclePlanResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     goal_id: str
     engine: str = CANDIDATE_SCHEMA_VERSION
     summary: Dict[str, Any] = Field(default_factory=dict)
     warnings: List[str] = Field(default_factory=list)
     candidates: List[OracleCandidateCommand] = Field(default_factory=list)
 
-    def get_requires_approval_candidates(self) -> List[OracleCandidateCommand]:
-        """Return all candidates that require operator approval."""
-        return [c for c in self.candidates if c.requires_approval()]
-
-    def get_valid_candidates(self) -> List[OracleCandidateCommand]:
-        """Return candidates that pass deferred validation."""
-        report = validate_candidates(self.candidates)
-        rejected_ids = set(report["rejection_reasons"].keys())
-        return [c for c in self.candidates if c.candidate_id not in rejected_ids]
-
-
-# MARK: - Validation Utility
 
 def validate_candidates(candidates: List[OracleCandidateCommand]) -> Dict[str, Any]:
-    """
-    Validate a list of candidates at the API boundary.
-    
-    Returns a validation report with:
-    - total_candidates: int
-    - valid_candidates: int
-    - rejected_candidates: int
-    - requires_approval_candidates: List[str]
-    - rejection_reasons: Dict[str, List[str]]
-    """
     valid = []
     rejected = []
     requires_approval_ids = []
@@ -139,27 +150,17 @@ def validate_candidates(candidates: List[OracleCandidateCommand]) -> Dict[str, A
 
     for candidate in candidates:
         errors: List[str] = []
-        
-        # Validate kind
         if candidate.kind not in CandidateKind.values():
-            errors.append(f"Unknown candidate_kind: \"{candidate.kind}\"")
-        
-        # Validate tool
+            errors.append(f'Unknown candidate_kind: "{candidate.kind}"')
         if candidate.tool not in ToolName.values():
-            errors.append(f"Unknown tool_name: \"{candidate.tool}\"")
-        
-        # Validate safety_class
+            errors.append(f'Unknown tool_name: "{candidate.tool}"')
         if candidate.safety_class not in SafetyClass.values():
-            errors.append(f"Invalid safety_class: \"{candidate.safety_class}\"")
-        
-        # Validate rationale
+            errors.append(f'Invalid safety_class: "{candidate.safety_class}"')
         if not candidate.rationale.strip():
             errors.append("Missing required field: rationale")
-        
-        # Validate confidence bounds
         if candidate.confidence < 0.0 or candidate.confidence > 1.0:
             errors.append(f"confidence out of bounds: {candidate.confidence}")
-        
+
         if errors:
             rejected.append(candidate)
             rejection_reasons[candidate.candidate_id] = errors
@@ -168,7 +169,7 @@ def validate_candidates(candidates: List[OracleCandidateCommand]) -> Dict[str, A
             if candidate.requires_approval():
                 requires_approval_ids.append(candidate.candidate_id)
 
-    report = {
+    return {
         "total_candidates": len(candidates),
         "valid_candidates": len(valid),
         "rejected_candidates": len(rejected),
@@ -176,29 +177,17 @@ def validate_candidates(candidates: List[OracleCandidateCommand]) -> Dict[str, A
         "rejection_reasons": rejection_reasons,
         "allRejectionReasons": rejection_reasons,
     }
-    return report
 
 
 def validate_response(response: OraclePlanResponse) -> OraclePlanResponse:
-    """
-    Validate a complete response before sending to Oracle.
-    
-    This is the API boundary validation - rejects malformed candidates early.
-    Adds warnings for rejected candidates and requires_approval candidates.
-    """
     validation = validate_candidates(response.candidates)
-    
-    # Add warning for rejected candidates
     if validation["rejected_candidates"] > 0:
         response.warnings.append(
             f"Warning: {validation['rejected_candidates']} candidates rejected during validation"
         )
-    
-    # Add warning for requires_approval candidates
     if validation["requires_approval_candidates"]:
         response.warnings.append(
             f"Info: {len(validation['requires_approval_candidates'])} candidates require operator approval: "
             f"{validation['requires_approval_candidates']}"
         )
-    
     return response
