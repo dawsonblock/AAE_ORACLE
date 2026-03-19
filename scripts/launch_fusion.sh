@@ -7,6 +7,20 @@ AAE_HOST="${AAE_HOST:-127.0.0.1}"
 AAE_PORT="${AAE_PORT:-8000}"
 DASHBOARD_PORT="${DASHBOARD_PORT:-8787}"
 
+AAE_PID=""
+DASHBOARD_PID=""
+
+cleanup() {
+  local pids=()
+  [[ -n "$AAE_PID" ]]       && pids+=("$AAE_PID")
+  [[ -n "$DASHBOARD_PID" ]] && pids+=("$DASHBOARD_PID")
+  if [[ ${#pids[@]} -gt 0 ]]; then
+    kill "${pids[@]}" 2>/dev/null || true
+    wait "${pids[@]}" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT INT TERM
+
 cd "$ROOT_DIR/aae-engine"
 "$PYTHON_BIN" -m pip install -e .
 
