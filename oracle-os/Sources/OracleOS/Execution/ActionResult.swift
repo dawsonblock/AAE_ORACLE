@@ -162,7 +162,7 @@ public final class VerifiedActionExecutor: @unchecked Sendable {
         action: () -> ToolResult
     ) -> ToolResult {
         guard context.source == .agentLoop else {
-            fatalError("Unauthorized execution path")
+            return ToolResult(success: false, error: "Unauthorized execution path: context.source must be .agentLoop")
         }
         let result = action()
         var data = result.data ?? [:]
