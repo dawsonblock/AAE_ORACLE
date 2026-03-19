@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections import deque
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -23,7 +24,6 @@ from aae.storage.ranking_store import RankingStore
 router = APIRouter(prefix="/api/oracle", tags=["oracle"])
 BRIDGE = OraclePlanningBridge()
 RESULT_SERVICE = ResultService()
-_SERVICE_APP = oracle_bridge_app
 _experiment_store = ExperimentStore(db="experiments.db")
 _ranking_store = RankingStore(db="rankings.db")
 _event_logger = StructuredEventLogger()
@@ -34,7 +34,7 @@ def _read_recent_events(limit: int = 200) -> list[dict]:
     path = Path(_event_logger.path)
     if not path.exists():
         return []
-    events: list[dict] = []
+    events: deque[dict] = deque(maxlen=limit)
     with path.open(encoding="utf-8") as handle:
         for line in handle:
             line = line.strip()
@@ -44,7 +44,7 @@ def _read_recent_events(limit: int = 200) -> list[dict]:
                 events.append(json.loads(line))
             except json.JSONDecodeError:
                 continue
-    return events[-limit:]
+    return list(events)
 
 
 def _repair_usefulness(score: float) -> str:

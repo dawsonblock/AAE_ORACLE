@@ -72,7 +72,6 @@ class Planner:
                     "target_files": target_files or [],
                     "diff": variant,
                     "trace_id": trace_id,
-                    "coverage_gain": coverage_gain,
                 }
 
                 verdict = validate(candidate)

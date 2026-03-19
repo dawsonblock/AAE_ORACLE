@@ -69,19 +69,25 @@ class RepairLoop:
         best_candidate = None
 
         for candidate in candidates:
-            assert candidate["id"]
-            assert candidate["diff"]
-            assert isinstance(candidate["target_files"], list)
+            candidate_id = candidate.get("id")
+            if not candidate_id:
+                raise ValueError("planner.generate() produced a candidate without a non-empty 'id'.")
+            if not candidate.get("diff"):
+                raise ValueError(f"planner.generate() produced candidate {candidate_id!r} without a non-empty 'diff'.")
+            target_files = candidate.get("target_files")
+            if not isinstance(target_files, list):
+                raise TypeError(
+                    f"planner.generate() produced candidate {candidate_id!r} with non-list 'target_files': "
+                    f"{type(target_files).__name__}"
+                )
 
-            patch_meta = None
             try:
-                patch_meta = self.applier.apply(file_path, candidate["diff"])
+                self.applier.apply(file_path, candidate["diff"])
                 result = self.harness.run(project_path)
                 evaluation = self.evaluator.evaluate(goal_id, result)
                 score = evaluation["score"]
             finally:
-                if patch_meta is not None:
-                    self.applier.rollback(file_path)
+                self.applier.rollback(file_path)
 
             self.result_service.ingest(
                 {

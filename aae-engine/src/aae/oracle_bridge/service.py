@@ -58,7 +58,21 @@ def plan(request: PlanRequest):
             target_files=request.target_files,
             trace_id=trace_id,
         )
-        candidates = [Candidate.model_validate(candidate) for candidate in raw_candidates]
+        # Normalize planner output to the canonical Candidate schema by
+        # dropping any fields not defined on the Candidate model. This prevents
+        # extra fields (e.g., "coverage_gain") from causing validation errors.
+        allowed_fields = set(Candidate.model_fields.keys())
+        normalized_candidates = []
+        for candidate in raw_candidates:
+            if isinstance(candidate, dict):
+                filtered_candidate = {k: v for k, v in candidate.items() if k in allowed_fields}
+                normalized_candidates.append(filtered_candidate)
+            else:
+                # If the planner returns non-dict candidates, preserve them as-is;
+                # Candidate.model_validate will handle any necessary coercion.
+                normalized_candidates.append(candidate)
+
+        candidates = [Candidate.model_validate(candidate) for candidate in normalized_candidates]
         _event_logger.log(
             {
                 "stage": "plan",
@@ -83,7 +97,7 @@ def plan(request: PlanRequest):
         )
         _metrics["rejected"] += 1
         _metrics["rejection_reasons"]["planner_error"] += 1
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Planner error")
 
 
 class OraclePlanningBridge:

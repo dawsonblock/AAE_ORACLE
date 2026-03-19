@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from aae.oracle_bridge.contracts import Candidate, CandidateType, ContractVersion, ExperimentResultRequest, PlanRequest
+from aae.oracle_bridge.result_contracts import OracleExperimentResultRequest
 
 CANDIDATE_SCHEMA_VERSION = "aae.oracle_bridge.v1"
 
@@ -198,7 +199,7 @@ def convert_oracle_response(
     return validate_response(response)
 
 
-def convert_oracle_result_request(request: Any) -> ExperimentResultRequest:
+def convert_oracle_result_request(request: OracleExperimentResultRequest) -> ExperimentResultRequest:
     execution_status = getattr(request, "execution_status", "failure")
     test_results = getattr(request, "test_results", None)
     build_results = getattr(request, "build_results", None)
