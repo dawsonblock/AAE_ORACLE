@@ -6,7 +6,12 @@ if command -v python >/dev/null 2>&1; then
   PYTHON_BIN="python"
 fi
 
-"${PYTHON_BIN}" -m venv .venv
+rm -rf .venv
+
+if ! "${PYTHON_BIN}" -m venv .venv; then
+  "${PYTHON_BIN}" -m pip install --user virtualenv
+  "${PYTHON_BIN}" -m virtualenv .venv
+fi
 source .venv/bin/activate
 
 pip install --upgrade pip
