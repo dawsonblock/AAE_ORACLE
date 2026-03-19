@@ -6,7 +6,7 @@ import sys
 from aae.contracts.planner import BranchExecutionResult
 from aae.contracts.sandbox import SandboxRunSpec
 from aae.sandbox.sandbox_api import SandboxAPI
-from aae.test_repair.repair_loop import RepairLoop
+from aae.repair.repair_loop import RepairLoop
 
 
 class BranchExecutor:
