@@ -1,6 +1,6 @@
-from aae.code_analysis.call_signature_resolver import CallSignatureResolver
-from aae.code_analysis.cfg_builder import CfgBuilder
-from aae.code_analysis.symbol_index import SymbolIndex
-from aae.code_analysis.type_inference import TypeInferenceEngine
+from .call_signature_resolver import CallSignatureResolver
+from .cfg_builder import CfgBuilder
+from .symbol_index import SymbolIndex
+from .type_inference import TypeInferenceEngine
 
 __all__ = ["CallSignatureResolver", "CfgBuilder", "SymbolIndex", "TypeInferenceEngine"]
