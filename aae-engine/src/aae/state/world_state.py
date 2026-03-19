@@ -12,8 +12,18 @@ class WorldState:
         }
 
     def apply(self, event: EventEnvelope) -> None:
-        event_type = event.event_type
-        payload = event.payload
+        if isinstance(event, dict):
+            event_type = event.get("event_type", "") or event.get("type", "")
+            payload = event.get("payload", {})
+            if isinstance(payload, dict):
+                payload = {
+                    "agent_id": event.get("agent_id"),
+                    "parent_agent_id": event.get("parent_agent_id"),
+                    **payload,
+                }
+        else:
+            event_type = event.event_type
+            payload = event.payload
 
         if event_type == "execution_completed":
             self._state["last_execution"] = payload

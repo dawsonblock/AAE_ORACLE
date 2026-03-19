@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import time
 from typing import Any, Dict, List
 
@@ -32,7 +30,7 @@ class DeepIntegratedRuntime:
         self.store = InMemoryMemoryStore()
         self._last_result: Dict[str, Any] | None = None
 
-    async def run(self, request: IntegrationTaskRequest) -> IntegrationRunResult:
+    def run(self, request: IntegrationTaskRequest) -> IntegrationRunResult:
         started = time.time()
         self.memory.start_session(request.task_id, request.objective, request.user_message)
         self.event_log.create_event('integration.workflow_received', task_id=request.task_id, status='received', payload=request.model_dump())
@@ -60,7 +58,7 @@ class DeepIntegratedRuntime:
         action = self._build_action(request, decision)
         self.memory.record_system_message(request.task_id, f"selected tool={decision['tool']} lane={decision['lane']}")
         self.memory.record_tool_use(request.task_id, decision['tool'], str(request.payload), f"dispatch via {worker.worker_id}")
-        result = await self.executor.run(action)
+        result = self.executor.run(action)
         self.distributed.complete(worker)
 
         artifacts = self._make_artifacts(request, decision, result, worker.worker_id, started)

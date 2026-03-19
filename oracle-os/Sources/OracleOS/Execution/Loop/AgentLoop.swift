@@ -170,4 +170,11 @@ public final class AgentLoop {
             projectMemoryCoordinator: projectMemoryCoordinator
         )
     }
+
+    public func execute(goal: Goal) {
+        Task { [weak self] in
+            guard let self else { return }
+            _ = await self.run(goal: goal)
+        }
+    }
 }
