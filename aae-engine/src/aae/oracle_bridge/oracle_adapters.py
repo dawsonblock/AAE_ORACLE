@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from aae.oracle_bridge.contracts import Candidate, CandidateType, ContractVersion, ExperimentResultRequest, PlanRequest
+from aae.oracle_bridge.result_contracts import OracleExperimentResultRequest
 
 CANDIDATE_SCHEMA_VERSION = "aae.oracle_bridge.v1"
 
