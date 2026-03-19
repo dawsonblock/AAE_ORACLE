@@ -55,7 +55,9 @@ class ExecutionRouter:
         """
         kind = _ROUTE_TABLE.get(action)
         if kind is None:
-            raise ValueError(f"Unknown execution action: {action}")
+            msg = f"Unknown execution action: {action}"
+            log.warning(msg)
+            return ExecResult(status="failed", error=msg)
         request = ExecRequest(
             kind=kind,
             payload=payload,
